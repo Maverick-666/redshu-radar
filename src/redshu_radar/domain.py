@@ -13,6 +13,12 @@ class Product:
     title: str | None
     shop_id: str | None
     shop_name: str | None
+    audience: str | None
+    scenario: str | None
+    problem: str | None
+    delivery: str | None
+    notes: str | None
+    next_action: str | None
 
 
 @dataclass(frozen=True)
@@ -40,3 +46,14 @@ class CollectionAttempt:
     http_status: int | None
     error_type: str | None
     error_message: str | None
+
+
+@dataclass(frozen=True)
+class CollectionRun:
+    id: int
+    trigger: str
+    started_at: datetime
+    finished_at: datetime | None
+    success_count: int
+    failure_count: int
+    status: str

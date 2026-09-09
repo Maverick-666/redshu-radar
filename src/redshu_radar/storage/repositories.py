@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from redshu_radar.domain import CollectionAttempt, Product, Snapshot
+from redshu_radar.domain import CollectionAttempt, CollectionRun, Product, Snapshot
 from redshu_radar.storage.database import Database
 
 
@@ -12,6 +12,26 @@ def _as_iso(value: datetime) -> str:
 
 def _as_datetime(value: str) -> datetime:
     return datetime.fromisoformat(value)
+
+
+def _product_from_row(row: object) -> Product:
+    return Product(
+        item_id=row["item_id"],
+        original_input=row["original_input"],
+        source_url=row["source_url"],
+        observed_since=_as_datetime(row["observed_since"]),
+        enabled=bool(row["enabled"]),
+        decision_status=row["decision_status"],
+        title=row["title"],
+        shop_id=row["shop_id"],
+        shop_name=row["shop_name"],
+        audience=row["audience"],
+        scenario=row["scenario"],
+        problem=row["problem"],
+        delivery=row["delivery"],
+        notes=row["notes"],
+        next_action=row["next_action"],
+    )
 
 
 class ProductRepository:
@@ -50,20 +70,54 @@ class ProductRepository:
             rows = connection.execute(
                 "SELECT * FROM products ORDER BY observed_since, item_id"
             ).fetchall()
-        return [
-            Product(
-                item_id=row["item_id"],
-                original_input=row["original_input"],
-                source_url=row["source_url"],
-                observed_since=_as_datetime(row["observed_since"]),
-                enabled=bool(row["enabled"]),
-                decision_status=row["decision_status"],
-                title=row["title"],
-                shop_id=row["shop_id"],
-                shop_name=row["shop_name"],
+        return [_product_from_row(row) for row in rows]
+
+    def get(self, item_id: str) -> Product | None:
+        with self.database.connect() as connection:
+            row = connection.execute(
+                "SELECT * FROM products WHERE item_id = ?", (item_id,)
+            ).fetchone()
+        return _product_from_row(row) if row is not None else None
+
+    def count(self) -> int:
+        with self.database.connect() as connection:
+            row = connection.execute("SELECT COUNT(*) FROM products").fetchone()
+        return int(row[0])
+
+    def update_decision(
+        self,
+        item_id: str,
+        *,
+        decision_status: str,
+        audience: str | None,
+        scenario: str | None,
+        problem: str | None,
+        delivery: str | None,
+        notes: str | None,
+        next_action: str | None,
+        updated_at: datetime,
+    ) -> Product | None:
+        with self.database.connect() as connection:
+            connection.execute(
+                """
+                UPDATE products
+                SET decision_status = ?, audience = ?, scenario = ?, problem = ?,
+                    delivery = ?, notes = ?, next_action = ?, updated_at = ?
+                WHERE item_id = ?
+                """,
+                (
+                    decision_status,
+                    audience,
+                    scenario,
+                    problem,
+                    delivery,
+                    notes,
+                    next_action,
+                    _as_iso(updated_at),
+                    item_id,
+                ),
             )
-            for row in rows
-        ]
+        return self.get(item_id)
 
 
 class CollectionRepository:
@@ -242,3 +296,27 @@ class CollectionRepository:
                 (item_id,),
             ).fetchone()
         return row[0] if row and row[0] is not None else None
+
+    def snapshot_count(self) -> int:
+        with self.database.connect() as connection:
+            row = connection.execute("SELECT COUNT(*) FROM snapshots").fetchone()
+        return int(row[0])
+
+    def latest_run(self) -> CollectionRun | None:
+        with self.database.connect() as connection:
+            row = connection.execute(
+                "SELECT * FROM collection_runs ORDER BY started_at DESC, id DESC LIMIT 1"
+            ).fetchone()
+        if row is None:
+            return None
+        return CollectionRun(
+            id=row["id"],
+            trigger=row["trigger"],
+            started_at=_as_datetime(row["started_at"]),
+            finished_at=(
+                _as_datetime(row["finished_at"]) if row["finished_at"] else None
+            ),
+            success_count=row["success_count"],
+            failure_count=row["failure_count"],
+            status=row["status"],
+        )
