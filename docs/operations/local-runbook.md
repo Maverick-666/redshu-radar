@@ -6,7 +6,7 @@
 
 默认位置：
 
-- 项目：`/Users/maverick/Documents/Juicy_Projects/redshu-radar`
+- 项目：本仓库所在目录
 - 数据目录：`~/Library/Application Support/RedshuRadar`
 - 数据库：`~/Library/Application Support/RedshuRadar/redshu-radar.sqlite3`
 - 调度日志：同一数据目录下的 `collector.stdout.log` 和 `collector.stderr.log`
@@ -19,7 +19,7 @@
 每个新终端先进入项目并指定非隐藏虚拟环境：
 
 ```bash
-cd /Users/maverick/Documents/Juicy_Projects/redshu-radar
+cd /path/to/redshu-radar
 export UV_PROJECT_ENVIRONMENT=venv
 ```
 

@@ -2,7 +2,7 @@
 
 - 日期：2026-09-09
 - 状态：设计与正式文档已由用户确认；已吸收 2026-09-09 新增界面及同行研究参考
-- 项目目录：`/Users/maverick/Documents/Juicy_Projects/redshu-radar`
+- 项目目录：本仓库根目录
 - 核心依据：[冬青公开提示词](https://github.com/dong-liudong/hongshuleida/blob/main/dq.md)
 
 ## 1. 背景与目标
