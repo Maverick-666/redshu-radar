@@ -1,0 +1,24 @@
+{
+  "success": true,
+  "msg": "ok",
+  "data": {
+    "template_data": [
+      {
+        "priceH5": {
+          "highlightPrice": 9.9,
+          "itemAnalysisDataText": "已售1.2万"
+        },
+        "sellerH5": {
+          "id": "shop-1",
+          "name": "测试店铺"
+        },
+        "variantsParams": {
+          "list": [
+            {"name": "商品名称", "value": "开学第一课 PPT"},
+            {"name": "发货方式", "value": "网盘"}
+          ]
+        }
+      }
+    ]
+  }
+}

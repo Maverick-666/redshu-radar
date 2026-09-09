@@ -1,0 +1,23 @@
+{
+  "success": true,
+  "msg": "ok",
+  "data": {
+    "template_data": [
+      {
+        "priceH5": {
+          "highlightPrice": "1.99",
+          "itemAnalysisDataText": ""
+        },
+        "sellerH5": {
+          "id": null,
+          "name": "新店"
+        },
+        "variantsParams": {
+          "list": [
+            {"name": "商品名称", "value": "新商品"}
+          ]
+        }
+      }
+    ]
+  }
+}

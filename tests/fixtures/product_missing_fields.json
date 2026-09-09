@@ -1,0 +1,19 @@
+{
+  "success": true,
+  "msg": "ok",
+  "data": {
+    "template_data": [
+      {
+        "priceH5": {
+          "itemAnalysisDataText": "已售123"
+        },
+        "sellerH5": {
+          "name": "测试店铺"
+        },
+        "variantsParams": {
+          "list": []
+        }
+      }
+    ]
+  }
+}
