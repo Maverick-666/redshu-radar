@@ -1,8 +1,9 @@
 from dataclasses import asdict
 from pathlib import Path
 
-from redshu_radar.analytics.metrics import calculate_metrics
-from redshu_radar.domain import Product
+from redshu_radar.analytics.metrics import ProductMetrics, calculate_metrics
+from redshu_radar.analytics.ranking import rank_products
+from redshu_radar.domain import Product, Snapshot
 from redshu_radar.storage.repositories import CollectionRepository, ProductRepository
 
 
@@ -27,21 +28,56 @@ class RadarService:
         }
 
     def list_products(self) -> list[dict[str, object]]:
-        return [self._product_payload(product) for product in self.products.list_all()]
+        entries = [
+            (product, self.collections.snapshots_for(product.item_id))
+            for product in self.products.list_all()
+        ]
+        metrics = {
+            product.item_id: calculate_metrics(snapshots)
+            for product, snapshots in entries
+            if snapshots
+        }
+        ranked_ids = [item.item_id for item in rank_products(list(metrics.values()))]
+        ranked_set = set(ranked_ids)
+        ordered_ids = ranked_ids + [
+            product.item_id
+            for product, _ in entries
+            if product.item_id not in ranked_set
+        ]
+        entries_by_id = {
+            product.item_id: (product, snapshots) for product, snapshots in entries
+        }
+        return [
+            self._product_payload(
+                entries_by_id[item_id][0],
+                entries_by_id[item_id][1],
+                metrics.get(item_id),
+            )
+            for item_id in ordered_ids
+        ]
 
     def product_detail(self, item_id: str) -> dict[str, object] | None:
         product = self.products.get(item_id)
         if product is None:
             return None
-        payload = self._product_payload(product)
+        snapshots = self.collections.snapshots_for(item_id)
+        metrics = calculate_metrics(snapshots) if snapshots else None
+        payload = self._product_payload(product, snapshots, metrics)
         payload["snapshots"] = [
-            asdict(snapshot) for snapshot in self.collections.snapshots_for(item_id)
+            asdict(snapshot) for snapshot in snapshots
+        ]
+        payload["failures"] = [
+            asdict(attempt) for attempt in self.collections.failures_for(item_id)
         ]
         return payload
 
-    def _product_payload(self, product: Product) -> dict[str, object]:
+    def _product_payload(
+        self,
+        product: Product,
+        snapshots: list[Snapshot],
+        metrics: ProductMetrics | None,
+    ) -> dict[str, object]:
         payload = asdict(product)
-        snapshots = self.collections.snapshots_for(product.item_id)
         if not snapshots:
             payload.update(
                 {
@@ -55,9 +91,11 @@ class RadarService:
                     "current_snapshot_id": None,
                 }
             )
+            self._apply_latest_error(payload, product.item_id, None)
             return payload
 
-        metrics = calculate_metrics(snapshots)
+        if metrics is None:
+            raise ValueError("snapshots require metrics")
         payload.update(asdict(metrics))
         payload["data_status"] = payload.pop("status")
         latest = snapshots[-1]
@@ -69,4 +107,24 @@ class RadarService:
                 "price_cents": latest.price_cents,
             }
         )
+        self._apply_latest_error(payload, product.item_id, latest)
         return payload
+
+    def _apply_latest_error(
+        self,
+        payload: dict[str, object],
+        item_id: str,
+        latest_snapshot: Snapshot | None,
+    ) -> None:
+        attempt = self.collections.latest_attempt_for(item_id)
+        payload["last_error"] = None
+        if (
+            attempt is not None
+            and not attempt.succeeded
+            and (
+                latest_snapshot is None
+                or attempt.attempted_at >= latest_snapshot.captured_at
+            )
+        ):
+            payload["data_status"] = "collection_error"
+            payload["last_error"] = asdict(attempt)

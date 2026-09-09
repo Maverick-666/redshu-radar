@@ -25,6 +25,21 @@ def test_daily_anchor_is_due_when_no_success_exists() -> None:
     assert daily_anchor_due(None, datetime(2026, 9, 9, 12, 0, tzinfo=SHANGHAI)) is True
 
 
+def test_daily_anchor_is_calculated_in_configured_timezone() -> None:
+    last_success = datetime(2026, 9, 8, 16, 2, tzinfo=ZoneInfo("UTC"))
+
+    assert daily_anchor_due(
+        last_success,
+        datetime(2026, 9, 9, 1, 0, tzinfo=ZoneInfo("UTC")),
+        timezone=SHANGHAI,
+    ) is False
+    assert daily_anchor_due(
+        last_success,
+        datetime(2026, 9, 9, 16, 3, tzinfo=ZoneInfo("UTC")),
+        timezone=SHANGHAI,
+    ) is True
+
+
 def test_launchd_template_runs_daily_collection_under_caffeinate() -> None:
     text = TEMPLATE.read_text(encoding="utf-8")
     rendered = text.replace("__PROJECT_DIR__", "/tmp/project").replace(

@@ -49,6 +49,7 @@ def test_dashboard_contains_core_workflow_and_no_demo_rows(tmp_path: Path) -> No
     assert "添加商品" in response.text
     assert "24h 增量" in response.text
     assert "商品价值" in response.text
+    assert 'data-filter="cross_period"' in response.text
     assert "暂无商品" in response.text
     assert "开学第一课 PPT" not in response.text
 
@@ -68,6 +69,9 @@ def test_dashboard_links_static_assets(tmp_path: Path) -> None:
     assert '"/api/status"' in script.text
     assert '"/api/products/import"' in script.text
     assert '"/api/collections"' in script.text
+    assert "baseline_snapshot_id" in script.text
+    assert "current_snapshot_id" in script.text
+    assert "interval_hours" in script.text
 
 
 def test_dashboard_has_add_and_detail_drawers(tmp_path: Path) -> None:
@@ -78,6 +82,10 @@ def test_dashboard_has_add_and_detail_drawers(tmp_path: Path) -> None:
     assert "分享文案、商品链接或 24 位商品 ID" in response.text
     assert "人群" in response.text
     assert "下一步动作" in response.text
+    assert "采集失败记录" in response.text
+
+    script = request(app(tmp_path), "/static/app.js")
+    assert "product.failures" in script.text
 
 
 def test_narrow_browser_keeps_toolbar_and_drawers_visible(tmp_path: Path) -> None:

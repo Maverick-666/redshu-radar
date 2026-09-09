@@ -91,3 +91,30 @@ def test_reported_sales_rollback_keeps_trusted_high_water(tmp_path: Path) -> Non
         snapshot.sold_reported for snapshot in collections.snapshots_for("c" * 24)
     ] == [120, 100]
     assert collections.trusted_high_water("c" * 24) == 120
+
+
+def test_rate_limit_stops_the_rest_of_the_batch(tmp_path: Path) -> None:
+    now = datetime(2026, 9, 9, 0, 2, tzinfo=UTC)
+    database = Database(tmp_path / "radar.sqlite3")
+    database.initialize()
+    products = ProductRepository(database)
+    collections = CollectionRepository(database)
+    for item_id in ("a" * 24, "b" * 24, "c" * 24):
+        products.add(item_id, item_id, None, now)
+    collector = FakeCollector(
+        {
+            "a" * 24: CollectionError(
+                "rate_limited", "HTTP 461", http_status=461
+            ),
+            "b" * 24: collected("b" * 24, 100),
+            "c" * 24: collected("c" * 24, 100),
+        }
+    )
+
+    summary = CollectionService(products, collections, collector).collect_all(
+        "daily", captured_at=now
+    )
+
+    assert collector.calls == ["a" * 24]
+    assert summary.failure_count == 1
+    assert summary.status == "failed"

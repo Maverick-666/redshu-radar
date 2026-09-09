@@ -1,11 +1,11 @@
 import asyncio
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import httpx
 from fastapi import FastAPI
 
-from redshu_radar.collectors.base import CollectedProduct
+from redshu_radar.collectors.base import CollectedProduct, CollectionError
 from redshu_radar.collectors.models import NormalizedProduct
 from redshu_radar.config import Settings
 from redshu_radar.web.app import create_app
@@ -29,6 +29,42 @@ class FakeCollector:
             source="public_api",
             response_hash="fixture-hash",
         )
+
+
+class RankingCollector:
+    def __init__(self) -> None:
+        self.calls: dict[str, int] = {}
+
+    def collect(self, item_id: str) -> CollectedProduct:
+        call = self.calls.get(item_id, 0)
+        self.calls[item_id] = call + 1
+        sold = {
+            "a" * 24: (100, 200),
+            "b" * 24: (100, 300),
+        }[item_id][call]
+        return CollectedProduct(
+            item_id=item_id,
+            product=NormalizedProduct(
+                title=f"商品 {item_id[0]}",
+                shop_id="shop-1",
+                shop_name="测试店铺",
+                price_cents=990,
+                sold_reported=sold,
+            ),
+            source="public_api",
+            response_hash=f"fixture-{item_id[0]}-{call}",
+        )
+
+
+class FailingAfterSuccessCollector:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def collect(self, item_id: str) -> CollectedProduct:
+        self.calls += 1
+        if self.calls == 2:
+            raise CollectionError("network_error", "offline")
+        return FakeCollector().collect(item_id)
 
 
 class ApiClient:
@@ -148,3 +184,51 @@ def test_collection_rejects_unknown_trigger(tmp_path: Path) -> None:
     )
 
     assert response.status_code == 422
+
+
+def test_complete_daily_products_are_returned_in_product_value_order(
+    tmp_path: Path,
+) -> None:
+    current = NOW
+    application = create_app(
+        Settings(data_dir=tmp_path),
+        collector=RankingCollector(),
+        clock=lambda: current,
+    )
+    test_client = ApiClient(application)
+    test_client.post(
+        "/api/products/import",
+        json={"input_text": f"{'a' * 24}\n{'b' * 24}"},
+    )
+    test_client.post("/api/collections", json={"trigger": "manual"})
+    current += timedelta(hours=24)
+    test_client.post("/api/collections", json={"trigger": "daily"})
+
+    products = test_client.get("/api/products").json()
+
+    assert [product["item_id"] for product in products] == ["b" * 24, "a" * 24]
+
+
+def test_latest_product_failure_is_visible_without_losing_trusted_data(
+    tmp_path: Path,
+) -> None:
+    current = NOW
+    application = create_app(
+        Settings(data_dir=tmp_path),
+        collector=FailingAfterSuccessCollector(),
+        clock=lambda: current,
+    )
+    test_client = ApiClient(application)
+    test_client.post("/api/products/import", json={"input_text": ITEM_ID})
+    test_client.post("/api/collections", json={"trigger": "manual"})
+    current += timedelta(hours=1)
+
+    test_client.post("/api/collections", json={"trigger": "manual"})
+    product = test_client.get("/api/products").json()[0]
+    detail = test_client.get(f"/api/products/{ITEM_ID}").json()
+
+    assert product["data_status"] == "collection_error"
+    assert product["trusted_high_water"] == 100
+    assert product["last_error"]["error_type"] == "network_error"
+    assert len(detail["failures"]) == 1
+    assert detail["failures"][0]["error_message"] == "offline"

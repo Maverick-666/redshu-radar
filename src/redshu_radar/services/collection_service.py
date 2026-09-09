@@ -44,6 +44,8 @@ class CollectionService:
                     error_type=exc.error_type,
                     error_message=str(exc),
                 )
+                if exc.error_type == "rate_limited":
+                    break
                 continue
 
             normalized = collected.product

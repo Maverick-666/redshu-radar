@@ -61,6 +61,7 @@
             <button class="filter active" type="button" data-filter="all">全部</button>
             <button class="filter" type="button" data-filter="complete_daily">完整日级</button>
             <button class="filter" type="button" data-filter="awaiting_baseline">待基线</button>
+            <button class="filter" type="button" data-filter="cross_period">跨期</button>
             <button class="filter" type="button" data-filter="attention">异常</button>
           </div>
           <div class="actions">
@@ -139,6 +140,8 @@
         </div>
         <h3>可信快照</h3>
         <div id="snapshot-list" class="snapshot-list"></div>
+        <h3>采集失败记录</h3>
+        <div id="failure-list" class="snapshot-list"></div>
       </div>
       <div class="drawer-footer">
         <button class="button ghost" type="button" data-close-drawer>关闭</button>

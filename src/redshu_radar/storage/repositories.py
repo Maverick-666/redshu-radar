@@ -275,19 +275,48 @@ class CollectionRepository:
                 """,
                 (run_id,),
             ).fetchall()
-        return [
-            CollectionAttempt(
-                id=row["id"],
-                run_id=row["run_id"],
-                item_id=row["item_id"],
-                attempted_at=_as_datetime(row["attempted_at"]),
-                succeeded=bool(row["succeeded"]),
-                http_status=row["http_status"],
-                error_type=row["error_type"],
-                error_message=row["error_message"],
-            )
-            for row in rows
-        ]
+        return [self._attempt_from_row(row) for row in rows]
+
+    def latest_attempt_for(self, item_id: str) -> CollectionAttempt | None:
+        with self.database.connect() as connection:
+            row = connection.execute(
+                """
+                SELECT * FROM collection_attempts
+                WHERE item_id = ?
+                ORDER BY attempted_at DESC, id DESC
+                LIMIT 1
+                """,
+                (item_id,),
+            ).fetchone()
+        return self._attempt_from_row(row) if row is not None else None
+
+    def failures_for(
+        self, item_id: str, *, limit: int = 20
+    ) -> list[CollectionAttempt]:
+        with self.database.connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT * FROM collection_attempts
+                WHERE item_id = ? AND succeeded = 0
+                ORDER BY attempted_at DESC, id DESC
+                LIMIT ?
+                """,
+                (item_id, limit),
+            ).fetchall()
+        return [self._attempt_from_row(row) for row in rows]
+
+    @staticmethod
+    def _attempt_from_row(row: object) -> CollectionAttempt:
+        return CollectionAttempt(
+            id=row["id"],
+            run_id=row["run_id"],
+            item_id=row["item_id"],
+            attempted_at=_as_datetime(row["attempted_at"]),
+            succeeded=bool(row["succeeded"]),
+            http_status=row["http_status"],
+            error_type=row["error_type"],
+            error_message=row["error_message"],
+        )
 
     def trusted_high_water(self, item_id: str) -> int | None:
         with self.database.connect() as connection:

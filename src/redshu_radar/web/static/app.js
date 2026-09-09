@@ -191,14 +191,24 @@ async function openDetail(itemId) {
       ["累计已售", formatValue(product.trusted_high_water)],
       ["爆品值", formatValue(product.hotness)],
       ["商品价值", product.product_value == null ? "—" : `¥${product.product_value}`],
+      ["实际间隔", product.interval_hours == null ? "—" : `${product.interval_hours} 小时`],
       ["数据状态", (statusLabels[product.data_status] || [product.data_status])[0]],
     ].map(([label, value]) => `<div class="metric"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`).join("");
     $("#decision-status").value = product.decision_status;
     ["audience", "scenario", "problem", "delivery", "notes"].forEach((field) => { $(`#${field}`).value = product[field] || ""; });
     $("#next-action").value = product.next_action || "";
     $("#snapshot-list").innerHTML = product.snapshots.length
-      ? [...product.snapshots].reverse().map((snapshot) => `<div class="snapshot-item"><span>${new Date(snapshot.captured_at).toLocaleString("zh-CN")}</span><span>已售 ${snapshot.sold_reported}</span><span>${formatMoney(snapshot.price_cents)}</span></div>`).join("")
+      ? [...product.snapshots].reverse().map((snapshot) => {
+        const roles = [];
+        if (snapshot.id === product.current_snapshot_id) roles.push("当前");
+        if (snapshot.id === product.baseline_snapshot_id) roles.push("指标基线");
+        const role = roles.length ? roles.join(" / ") : "历史";
+        return `<div class="snapshot-item"><span>${new Date(snapshot.captured_at).toLocaleString("zh-CN")} · ${role}</span><span>已售 ${snapshot.sold_reported}</span><span>${formatMoney(snapshot.price_cents)}</span></div>`;
+      }).join("")
       : '<p class="field-help">暂无可信快照。</p>';
+    $("#failure-list").innerHTML = product.failures.length
+      ? product.failures.map((failure) => `<div class="snapshot-item"><span>${new Date(failure.attempted_at).toLocaleString("zh-CN")}</span><span>${escapeHtml(failure.error_type)}</span><span>${escapeHtml(failure.error_message)}</span></div>`).join("")
+      : '<p class="field-help">暂无采集失败。</p>';
     openDrawer("#detail-drawer");
   } catch (error) {
     toast(error.message);
