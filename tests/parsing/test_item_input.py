@@ -85,3 +85,14 @@ def test_shared_product_link_prefers_goods_detail_path_over_query_ids() -> None:
     assert result[0].status == "ready"
     assert result[0].item_id == ITEM_ID
     assert result[0].source_url == resolved_url
+
+
+def test_rejects_multiple_ids_in_recognized_product_paths() -> None:
+    other_item_id = "b" * 24
+    ambiguous_url = (
+        f"https://www.xiaohongshu.com/goods-detail/{ITEM_ID}"
+        f"/goods/{other_item_id}"
+    )
+
+    with pytest.raises(InputParseError, match="多个商品 ID"):
+        extract_item_id(ambiguous_url)

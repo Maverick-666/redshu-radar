@@ -74,7 +74,7 @@ def extract_item_id(raw_input: str) -> ParsedItem:
     path_matches = [
         (match.group(1).lower(), url)
         for url in xhs_urls
-        if (match := PRODUCT_PATH_PATTERN.search(urlsplit(url).path))
+        for match in PRODUCT_PATH_PATTERN.finditer(urlsplit(url).path)
     ]
     path_item_ids = {item_id for item_id, _ in path_matches}
     if len(path_item_ids) > 1:
