@@ -37,24 +37,31 @@ class RadarService:
             for product, snapshots in entries
             if snapshots
         }
-        ranked_ids = [item.item_id for item in rank_products(list(metrics.values()))]
+        payloads = {
+            product.item_id: self._product_payload(
+                product,
+                snapshots,
+                metrics.get(product.item_id),
+            )
+            for product, snapshots in entries
+        }
+        ranked_ids = [
+            item.item_id
+            for item in rank_products(
+                [
+                    metrics[item_id]
+                    for item_id, payload in payloads.items()
+                    if payload["data_status"] == "complete_daily"
+                ]
+            )
+        ]
         ranked_set = set(ranked_ids)
         ordered_ids = ranked_ids + [
             product.item_id
             for product, _ in entries
             if product.item_id not in ranked_set
         ]
-        entries_by_id = {
-            product.item_id: (product, snapshots) for product, snapshots in entries
-        }
-        return [
-            self._product_payload(
-                entries_by_id[item_id][0],
-                entries_by_id[item_id][1],
-                metrics.get(item_id),
-            )
-            for item_id in ordered_ids
-        ]
+        return [payloads[item_id] for item_id in ordered_ids]
 
     def product_detail(self, item_id: str) -> dict[str, object] | None:
         product = self.products.get(item_id)

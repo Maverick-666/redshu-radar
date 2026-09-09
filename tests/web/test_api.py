@@ -38,8 +38,10 @@ class RankingCollector:
     def collect(self, item_id: str) -> CollectedProduct:
         call = self.calls.get(item_id, 0)
         self.calls[item_id] = call + 1
+        if item_id == "b" * 24 and call == 2:
+            raise CollectionError("network_error", "offline")
         sold = {
-            "a" * 24: (100, 200),
+            "a" * 24: (100, 200, 210),
             "b" * 24: (100, 300),
         }[item_id][call]
         return CollectedProduct(
@@ -232,3 +234,32 @@ def test_latest_product_failure_is_visible_without_losing_trusted_data(
     assert product["last_error"]["error_type"] == "network_error"
     assert len(detail["failures"]) == 1
     assert detail["failures"][0]["error_message"] == "offline"
+
+
+def test_latest_failure_removes_high_value_product_from_complete_daily_ranking(
+    tmp_path: Path,
+) -> None:
+    current = NOW
+    application = create_app(
+        Settings(data_dir=tmp_path),
+        collector=RankingCollector(),
+        clock=lambda: current,
+    )
+    test_client = ApiClient(application)
+    test_client.post(
+        "/api/products/import",
+        json={"input_text": f"{'a' * 24}\n{'b' * 24}"},
+    )
+    test_client.post("/api/collections", json={"trigger": "manual"})
+    current += timedelta(hours=24)
+    test_client.post("/api/collections", json={"trigger": "daily"})
+    current += timedelta(hours=1)
+
+    test_client.post("/api/collections", json={"trigger": "hourly"})
+    products = test_client.get("/api/products").json()
+
+    assert [product["item_id"] for product in products] == ["a" * 24, "b" * 24]
+    assert [product["data_status"] for product in products] == [
+        "complete_daily",
+        "collection_error",
+    ]
