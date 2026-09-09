@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>红薯雷达</title>
+    <link rel="stylesheet" href="/static/styles.css">
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand-block">
+          <div class="brand-mark">红</div>
+          <div>
+            <h1>红薯雷达</h1>
+            <p>小红书虚拟资料选品工作台</p>
+          </div>
+        </div>
+        <nav aria-label="主导航">
+          <div class="nav-group active">选品管理</div>
+          <button class="nav-item active" type="button">竞品监控</button>
+          <button class="nav-item" type="button" disabled>店铺分析 <span>后续</span></button>
+          <button class="nav-item" type="button" disabled>笔记研究 <span>后续</span></button>
+        </nav>
+        <div class="sidebar-note">
+          <strong>v0 原则</strong>
+          <p>失败不写 0，跨期不进日榜，每个指标都能追溯快照。</p>
+        </div>
+      </aside>
+
+      <main class="workspace">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">选品管理 / 竞品监控 / 看板</p>
+          </div>
+          <div class="system-strip" aria-label="系统状态">
+            <span><i id="run-dot" class="status-dot"></i><b id="run-state">待命</b></span>
+            <span>数据库：<b id="database-size">—</b></span>
+            <span>可信快照：<b id="snapshot-count">0</b></span>
+          </div>
+        </header>
+
+        <section class="page-heading">
+          <div>
+            <h2>竞品监控看板</h2>
+            <p>销量由可信快照差值计算；未知值保持为空。</p>
+          </div>
+          <div class="summary-chips">
+            <span>商品 <b id="product-count">0</b></span>
+            <span>完整日级 <b id="complete-count">0</b></span>
+            <span>待处理 <b id="attention-count">0</b></span>
+          </div>
+        </section>
+
+        <section class="toolbar" aria-label="看板工具">
+          <label class="search-box">
+            <span>⌕</span>
+            <input id="search-input" type="search" placeholder="搜索商品、店铺或商品 ID">
+          </label>
+          <div class="filter-group" role="group" aria-label="数据筛选">
+            <button class="filter active" type="button" data-filter="all">全部</button>
+            <button class="filter" type="button" data-filter="complete_daily">完整日级</button>
+            <button class="filter" type="button" data-filter="awaiting_baseline">待基线</button>
+            <button class="filter" type="button" data-filter="attention">异常</button>
+          </div>
+          <div class="actions">
+            <button id="collect-button" class="button secondary" type="button">立即采集</button>
+            <button id="add-button" class="button primary" type="button">＋ 添加商品</button>
+          </div>
+        </section>
+
+        <div class="notice">
+          <strong>每日锚点 00:02</strong>
+          <span>休眠或断网后只补采真实快照；跨期数据不进入 24h 榜单。</span>
+        </div>
+
+        <section class="table-card">
+          <div class="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>商品名称</th>
+                  <th>店铺</th>
+                  <th>当前价格</th>
+                  <th>24h 增量</th>
+                  <th>上一小时</th>
+                  <th>累计已售</th>
+                  <th>爆品值</th>
+                  <th>商品价值</th>
+                  <th>数据状态</th>
+                  <th>人工阶段</th>
+                </tr>
+              </thead>
+              <tbody id="product-rows">
+                <tr class="empty-row"><td colspan="10">暂无商品，先添加第一批候选。</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <footer class="table-footer"><span id="visible-count">0 个商品</span><span>本地数据 · 不上传账号凭证</span></footer>
+        </section>
+      </main>
+    </div>
+
+    <div id="drawer-backdrop" class="backdrop" hidden></div>
+
+    <aside id="add-drawer" class="drawer" aria-labelledby="add-title" hidden>
+      <div class="drawer-header">
+        <div><p class="eyebrow">建立观察基线</p><h2 id="add-title">添加商品</h2></div>
+        <button class="icon-button" type="button" data-close-drawer aria-label="关闭">×</button>
+      </div>
+      <div class="drawer-body">
+        <label for="product-input">分享文案、商品链接或 24 位商品 ID</label>
+        <textarea id="product-input" rows="9" placeholder="一行一个，支持批量粘贴"></textarea>
+        <p class="field-help">短链会先解析；重复商品不会再次创建。</p>
+        <div id="import-results" class="result-list" hidden></div>
+      </div>
+      <div class="drawer-footer">
+        <button class="button ghost" type="button" data-close-drawer>取消</button>
+        <button id="import-button" class="button primary" type="button">解析并建立基线</button>
+      </div>
+    </aside>
+
+    <aside id="detail-drawer" class="drawer wide" aria-labelledby="detail-title" hidden>
+      <div class="drawer-header">
+        <div><p class="eyebrow">商品详情</p><h2 id="detail-title">—</h2><p id="detail-shop">—</p></div>
+        <button class="icon-button" type="button" data-close-drawer aria-label="关闭">×</button>
+      </div>
+      <div class="drawer-body">
+        <div id="detail-metrics" class="metric-grid"></div>
+        <h3>人工判断</h3>
+        <div class="form-grid">
+          <label>阶段<select id="decision-status"><option value="watching">观察</option><option value="reviewing">复核</option><option value="testing">测试</option><option value="dropped">放弃</option><option value="scaling">放大</option></select></label>
+          <label>人群<input id="audience" type="text"></label>
+          <label>场景<input id="scenario" type="text"></label>
+          <label>问题<input id="problem" type="text"></label>
+          <label>交付<input id="delivery" type="text"></label>
+          <label class="span-two">判断备注<textarea id="notes" rows="3"></textarea></label>
+          <label class="span-two">下一步动作<input id="next-action" type="text"></label>
+        </div>
+        <h3>可信快照</h3>
+        <div id="snapshot-list" class="snapshot-list"></div>
+      </div>
+      <div class="drawer-footer">
+        <button class="button ghost" type="button" data-close-drawer>关闭</button>
+        <button id="save-decision-button" class="button primary" type="button">保存判断</button>
+      </div>
+    </aside>
+
+    <div id="toast" class="toast" hidden></div>
+    <script src="/static/app.js" defer></script>
+  </body>
+</html>

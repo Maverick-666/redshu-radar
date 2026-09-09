@@ -1,7 +1,11 @@
 from collections.abc import Callable
 from datetime import UTC, datetime
+from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
 
 from redshu_radar.collectors.base import ProductCollector
 from redshu_radar.collectors.public_api import default_public_api_collector
@@ -32,6 +36,13 @@ def create_app(
     )
     radar_service = RadarService(products, collections, active_settings.database_path)
     app = FastAPI(title="红薯雷达", version="0.1.0")
+    web_root = Path(__file__).resolve().parent
+    templates = Jinja2Templates(directory=web_root / "templates")
+    app.mount("/static", StaticFiles(directory=web_root / "static"), name="static")
+
+    @app.get("/", response_class=HTMLResponse)
+    def dashboard(request: Request) -> HTMLResponse:
+        return templates.TemplateResponse(request=request, name="index.html")
 
     @app.get("/api/status")
     def status() -> dict[str, object]:
