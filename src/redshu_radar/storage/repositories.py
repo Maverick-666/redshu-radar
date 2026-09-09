@@ -78,6 +78,31 @@ class CollectionRepository:
             )
         return int(cursor.lastrowid)
 
+    def finish_run(
+        self,
+        run_id: int,
+        *,
+        finished_at: datetime,
+        success_count: int,
+        failure_count: int,
+        status: str,
+    ) -> None:
+        with self.database.connect() as connection:
+            connection.execute(
+                """
+                UPDATE collection_runs
+                SET finished_at = ?, success_count = ?, failure_count = ?, status = ?
+                WHERE id = ?
+                """,
+                (
+                    _as_iso(finished_at),
+                    success_count,
+                    failure_count,
+                    status,
+                    run_id,
+                ),
+            )
+
     def record_success(
         self,
         *,
@@ -209,3 +234,11 @@ class CollectionRepository:
             )
             for row in rows
         ]
+
+    def trusted_high_water(self, item_id: str) -> int | None:
+        with self.database.connect() as connection:
+            row = connection.execute(
+                "SELECT MAX(sold_reported) FROM snapshots WHERE item_id = ?",
+                (item_id,),
+            ).fetchone()
+        return row[0] if row and row[0] is not None else None
