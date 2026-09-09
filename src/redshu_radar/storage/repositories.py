@@ -307,6 +307,22 @@ class CollectionRepository:
             row = connection.execute(
                 "SELECT * FROM collection_runs ORDER BY started_at DESC, id DESC LIMIT 1"
             ).fetchone()
+        return self._run_from_row(row)
+
+    def latest_successful_run(self) -> CollectionRun | None:
+        with self.database.connect() as connection:
+            row = connection.execute(
+                """
+                SELECT * FROM collection_runs
+                WHERE status = 'succeeded' AND success_count > 0
+                ORDER BY started_at DESC, id DESC
+                LIMIT 1
+                """
+            ).fetchone()
+        return self._run_from_row(row)
+
+    @staticmethod
+    def _run_from_row(row: object | None) -> CollectionRun | None:
         if row is None:
             return None
         return CollectionRun(

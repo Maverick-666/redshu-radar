@@ -14,6 +14,7 @@ from redshu_radar.collectors.base import ProductCollector
 from redshu_radar.collectors.public_api import default_public_api_collector
 from redshu_radar.config import Settings
 from redshu_radar.services.collection_service import CollectionService
+from redshu_radar.services.scheduling import daily_anchor_due
 from redshu_radar.storage.database import Database
 from redshu_radar.storage.repositories import CollectionRepository, ProductRepository
 from redshu_radar.web.app import create_app
@@ -77,7 +78,23 @@ def main(
         return 0
 
     if args.command == "web":
-        application = create_app(settings, collector=collector, clock=active_clock)
+        active_collector = collector or default_public_api_collector()
+        database = Database(settings.database_path)
+        database.initialize()
+        products = ProductRepository(database)
+        collections = CollectionRepository(database)
+        now = active_clock()
+        latest_success = collections.latest_successful_run()
+        if products.count() and daily_anchor_due(
+            latest_success.started_at if latest_success else None,
+            now,
+        ):
+            CollectionService(products, collections, active_collector).collect_all(
+                "recovery", captured_at=now
+            )
+        application = create_app(
+            settings, collector=active_collector, clock=active_clock
+        )
         (serve or _serve)(application, args.host, args.port)
         return 0
 
