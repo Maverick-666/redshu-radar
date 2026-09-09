@@ -8,6 +8,9 @@ from redshu_radar.parsing.short_links import resolve_short_link
 
 
 ITEM_ID_PATTERN = re.compile(r"(?<![0-9a-fA-F])([0-9a-fA-F]{24})(?![0-9a-fA-F])")
+PRODUCT_PATH_PATTERN = re.compile(
+    r"/(?:goods-detail|goods)/([0-9a-fA-F]{24})(?=/|$)"
+)
 URL_PATTERN = re.compile(r"https?://[^\s<>]+")
 TRAILING_PUNCTUATION = ").,，。；;！!？?]】"
 
@@ -67,6 +70,20 @@ def extract_item_id(raw_input: str) -> ParsedItem:
 
     if disallowed_url_with_id and not xhs_urls:
         raise InputParseError("商品链接必须来自小红书域名")
+
+    path_matches = [
+        (match.group(1).lower(), url)
+        for url in xhs_urls
+        if (match := PRODUCT_PATH_PATTERN.search(urlsplit(url).path))
+    ]
+    path_item_ids = {item_id for item_id, _ in path_matches}
+    if len(path_item_ids) > 1:
+        raise InputParseError("一行中发现多个商品 ID")
+    if path_item_ids:
+        item_id = path_item_ids.pop()
+        matching_urls = {url for matched_id, url in path_matches if matched_id == item_id}
+        source_url = matching_urls.pop() if len(matching_urls) == 1 else None
+        return ParsedItem(item_id=item_id, source_url=source_url)
 
     search_text = " ".join(xhs_urls) if xhs_urls else text
     item_ids = {match.group(1).lower() for match in ITEM_ID_PATTERN.finditer(search_text)}

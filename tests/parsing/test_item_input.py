@@ -67,3 +67,21 @@ def test_batch_resolves_xhs_short_link_before_extracting_id() -> None:
     assert result[0].status == "ready"
     assert result[0].item_id == ITEM_ID
     assert result[0].source_url == resolved_url
+
+
+def test_shared_product_link_prefers_goods_detail_path_over_query_ids() -> None:
+    short_url = "https://xhslink.com/m/3xbWAU2fTLM"
+    resolved_url = (
+        f"https://www.xiaohongshu.com/goods-detail/{ITEM_ID}"
+        f"?rate_limit_meta=itemId%3D{'b' * 24}&appuid={'c' * 24}"
+    )
+    share_text = f"【小红书】测试商品 {short_url} 点击链接打开小红书"
+
+    result = parse_batch_inputs(
+        share_text,
+        short_link_resolver=lambda url: resolved_url,
+    )
+
+    assert result[0].status == "ready"
+    assert result[0].item_id == ITEM_ID
+    assert result[0].source_url == resolved_url

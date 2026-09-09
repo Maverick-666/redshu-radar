@@ -6,7 +6,9 @@ from typing import Any
 from redshu_radar.collectors.models import NormalizedProduct
 
 
-SALES_PATTERN = re.compile(r"(?:已售|销量)?\s*([0-9]+(?:\.[0-9]+)?)\s*([万wW]?)")
+SALES_PATTERN = re.compile(
+    r"(?:已售|销量)?\s*([0-9]+(?:\.[0-9]+)?)\s*([万wW]?)\s*\+?"
+)
 
 
 class ResponseValidationError(ValueError):
