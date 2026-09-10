@@ -1,4 +1,5 @@
 from collections.abc import Callable
+from dataclasses import asdict
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -13,9 +14,25 @@ from redshu_radar.config import Settings
 from redshu_radar.services.collection_service import CollectionService
 from redshu_radar.services.product_service import ProductService
 from redshu_radar.services.radar_service import RadarService
+from redshu_radar.services.taxonomy_service import (
+    TaxonomyService,
+    TaxonomyValidationError,
+)
 from redshu_radar.storage.database import Database
-from redshu_radar.storage.repositories import CollectionRepository, ProductRepository
-from redshu_radar.web.schemas import CollectionRequest, DecisionUpdate, ImportRequest
+from redshu_radar.storage.repositories import (
+    CategoryRepository,
+    CollectionRepository,
+    ProductRepository,
+    TagRepository,
+)
+from redshu_radar.web.schemas import (
+    CategoryCreate,
+    CollectionRequest,
+    DecisionUpdate,
+    ImportRequest,
+    ProductDetailUpdate,
+    TagCreate,
+)
 
 
 def create_app(
@@ -30,11 +47,20 @@ def create_app(
     database.initialize()
     products = ProductRepository(database)
     collections = CollectionRepository(database)
+    categories = CategoryRepository(database)
+    tags = TagRepository(database)
     product_service = ProductService(products)
+    taxonomy_service = TaxonomyService(categories, tags, products)
     collection_service = CollectionService(
         products, collections, collector or default_public_api_collector()
     )
-    radar_service = RadarService(products, collections, active_settings.database_path)
+    radar_service = RadarService(
+        products,
+        collections,
+        categories,
+        tags,
+        active_settings.database_path,
+    )
     app = FastAPI(title="红薯雷达", version="0.1.0")
     web_root = Path(__file__).resolve().parent
     templates = Jinja2Templates(directory=web_root / "templates")
@@ -58,6 +84,43 @@ def create_app(
             request.input_text, observed_at=active_clock()
         )
 
+    @app.get("/api/taxonomy")
+    def taxonomy() -> dict[str, list[dict[str, object]]]:
+        return {
+            "categories": [
+                {**asdict(category), "product_count": product_count}
+                for category, product_count in categories.list_with_product_counts()
+            ],
+            "tags": [
+                {**asdict(tag), "product_count": product_count}
+                for tag, product_count in tags.list_with_product_counts()
+            ],
+        }
+
+    @app.post("/api/categories")
+    def create_category(request: CategoryCreate) -> object:
+        try:
+            if request.parent_id is None:
+                return taxonomy_service.create_track(
+                    request.name, created_at=active_clock()
+                )
+            return taxonomy_service.create_subcategory(
+                request.name,
+                parent_id=request.parent_id,
+                created_at=active_clock(),
+            )
+        except TaxonomyValidationError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @app.post("/api/tags")
+    def create_tag(request: TagCreate) -> object:
+        try:
+            return taxonomy_service.create_tag(
+                request.name, created_at=active_clock()
+            )
+        except TaxonomyValidationError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
     @app.get("/api/products/{item_id}")
     def product_detail(item_id: str) -> dict[str, object]:
         detail = radar_service.product_detail(item_id)
@@ -76,6 +139,24 @@ def create_app(
         )
         if updated is None:
             raise HTTPException(status_code=404, detail="商品不存在")
+        detail = radar_service.product_detail(item_id)
+        if detail is None:
+            raise HTTPException(status_code=404, detail="商品不存在")
+        return detail
+
+    @app.patch("/api/products/{item_id}")
+    def update_product(
+        item_id: str, request: ProductDetailUpdate
+    ) -> dict[str, object]:
+        try:
+            taxonomy_service.update_product(
+                item_id,
+                **request.model_dump(),
+                updated_at=active_clock(),
+            )
+        except TaxonomyValidationError as exc:
+            status_code = 404 if str(exc) == "商品不存在" else 422
+            raise HTTPException(status_code=status_code, detail=str(exc)) from exc
         detail = radar_service.product_detail(item_id)
         if detail is None:
             raise HTTPException(status_code=404, detail="商品不存在")

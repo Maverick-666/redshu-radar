@@ -78,6 +78,42 @@ class TaxonomyService:
             category_id=category_id,
             tag_ids=unique_tag_ids,
         )
+        self._raise_update_error(error)
+
+    def update_product(
+        self,
+        item_id: str,
+        *,
+        decision_status: str,
+        audience: str | None,
+        scenario: str | None,
+        problem: str | None,
+        delivery: str | None,
+        notes: str | None,
+        next_action: str | None,
+        enabled: bool,
+        category_id: int | None,
+        tag_ids: list[int],
+        updated_at: datetime,
+    ) -> None:
+        error = self.products.update_details(
+            item_id,
+            decision_status=decision_status,
+            audience=audience,
+            scenario=scenario,
+            problem=problem,
+            delivery=delivery,
+            notes=notes,
+            next_action=next_action,
+            enabled=enabled,
+            category_id=category_id,
+            tag_ids=list(dict.fromkeys(tag_ids)),
+            updated_at=updated_at,
+        )
+        self._raise_update_error(error)
+
+    @staticmethod
+    def _raise_update_error(error: str | None) -> None:
         if error == "product":
             raise TaxonomyValidationError("商品不存在")
         if error == "category":

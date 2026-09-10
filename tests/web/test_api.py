@@ -102,6 +102,23 @@ def client(tmp_path: Path) -> ApiClient:
     return ApiClient(app)
 
 
+def product_update_payload(**overrides: object) -> dict[str, object]:
+    payload: dict[str, object] = {
+        "decision_status": "watching",
+        "audience": None,
+        "scenario": None,
+        "problem": None,
+        "delivery": None,
+        "notes": None,
+        "next_action": None,
+        "enabled": True,
+        "category_id": None,
+        "tag_ids": [],
+    }
+    payload.update(overrides)
+    return payload
+
+
 def test_status_reports_empty_local_database(tmp_path: Path) -> None:
     response = client(tmp_path).get("/api/status")
 
@@ -282,3 +299,155 @@ def test_latest_failure_removes_high_value_product_from_complete_daily_ranking(
         "complete_daily",
         "collection_error",
     ]
+
+
+def test_taxonomy_api_normalizes_reuses_and_lists_values(tmp_path: Path) -> None:
+    test_client = client(tmp_path)
+
+    track = test_client.post(
+        "/api/categories", json={"name": "  AI   教程  ", "parent_id": None}
+    )
+    duplicate_track = test_client.post(
+        "/api/categories", json={"name": "ai 教程", "parent_id": None}
+    )
+    subcategory = test_client.post(
+        "/api/categories",
+        json={"name": "提示词", "parent_id": track.json()["id"]},
+    )
+    tag = test_client.post("/api/tags", json={"name": "  常青  "})
+    duplicate_tag = test_client.post("/api/tags", json={"name": "常青"})
+    taxonomy = test_client.get("/api/taxonomy")
+
+    assert track.status_code == 200
+    assert duplicate_track.json()["id"] == track.json()["id"]
+    assert subcategory.status_code == 200
+    assert subcategory.json()["parent_id"] == track.json()["id"]
+    assert tag.status_code == 200
+    assert duplicate_tag.json()["id"] == tag.json()["id"]
+    assert [item["product_count"] for item in taxonomy.json()["categories"]] == [
+        0,
+        0,
+    ]
+    assert taxonomy.json()["tags"][0]["product_count"] == 0
+
+
+def test_product_update_and_reads_include_taxonomy_and_monitoring_state(
+    tmp_path: Path,
+) -> None:
+    test_client = client(tmp_path)
+    test_client.post("/api/products/import", json={"input_text": ITEM_ID})
+    track = test_client.post(
+        "/api/categories", json={"name": "AI 教程", "parent_id": None}
+    ).json()
+    subcategory = test_client.post(
+        "/api/categories",
+        json={"name": "提示词", "parent_id": track["id"]},
+    ).json()
+    tag = test_client.post("/api/tags", json={"name": "常青"}).json()
+
+    response = test_client.patch(
+        f"/api/products/{ITEM_ID}",
+        json=product_update_payload(
+            decision_status="reviewing",
+            audience="AI 初学者",
+            enabled=False,
+            category_id=subcategory["id"],
+            tag_ids=[tag["id"]],
+        ),
+    )
+
+    assert response.status_code == 200
+    detail = response.json()
+    assert detail["enabled"] is False
+    assert detail["audience"] == "AI 初学者"
+    assert detail["track"] == {"id": track["id"], "name": "AI 教程"}
+    assert detail["subcategory"] == {
+        "id": subcategory["id"],
+        "name": "提示词",
+    }
+    assert detail["tags"] == [{"id": tag["id"], "name": "常青"}]
+    listed = test_client.get("/api/products").json()[0]
+    assert listed["track"] == detail["track"]
+    assert listed["subcategory"] == detail["subcategory"]
+    assert listed["tags"] == detail["tags"]
+    taxonomy = test_client.get("/api/taxonomy").json()
+    assert [item["product_count"] for item in taxonomy["categories"]] == [1, 1]
+    assert taxonomy["tags"][0]["product_count"] == 1
+
+
+def test_invalid_product_taxonomy_update_is_atomic(tmp_path: Path) -> None:
+    test_client = client(tmp_path)
+    test_client.post("/api/products/import", json={"input_text": ITEM_ID})
+    track = test_client.post(
+        "/api/categories", json={"name": "AI 教程", "parent_id": None}
+    ).json()
+    subcategory = test_client.post(
+        "/api/categories",
+        json={"name": "提示词", "parent_id": track["id"]},
+    ).json()
+    tag = test_client.post("/api/tags", json={"name": "常青"}).json()
+    initial = product_update_payload(
+        decision_status="reviewing",
+        audience="原受众",
+        category_id=subcategory["id"],
+        tag_ids=[tag["id"]],
+    )
+    test_client.patch(f"/api/products/{ITEM_ID}", json=initial)
+
+    invalid_category = test_client.patch(
+        f"/api/products/{ITEM_ID}",
+        json=product_update_payload(
+            decision_status="dropped",
+            audience="错误受众",
+            enabled=False,
+            category_id=track["id"],
+            tag_ids=[],
+        ),
+    )
+    invalid_tag = test_client.patch(
+        f"/api/products/{ITEM_ID}",
+        json=product_update_payload(
+            decision_status="dropped",
+            audience="错误受众",
+            enabled=False,
+            category_id=subcategory["id"],
+            tag_ids=[999],
+        ),
+    )
+
+    assert invalid_category.status_code == 422
+    assert "细分品类" in invalid_category.json()["detail"]
+    assert invalid_tag.status_code == 422
+    assert "标签" in invalid_tag.json()["detail"]
+    detail = test_client.get(f"/api/products/{ITEM_ID}").json()
+    assert detail["decision_status"] == "reviewing"
+    assert detail["audience"] == "原受众"
+    assert detail["enabled"] is True
+    assert detail["category_id"] == subcategory["id"]
+    assert detail["tags"] == [{"id": tag["id"], "name": "常青"}]
+
+
+def test_disabling_and_reenabling_product_does_not_create_fake_snapshot(
+    tmp_path: Path,
+) -> None:
+    test_client = client(tmp_path)
+    test_client.post("/api/products/import", json={"input_text": ITEM_ID})
+    test_client.patch(
+        f"/api/products/{ITEM_ID}",
+        json=product_update_payload(enabled=False),
+    )
+
+    collection = test_client.post("/api/collections", json={"trigger": "manual"})
+
+    assert collection.json()["success_count"] == 0
+    assert test_client.get(f"/api/products/{ITEM_ID}").json()["snapshots"] == []
+
+    test_client.patch(
+        f"/api/products/{ITEM_ID}",
+        json=product_update_payload(enabled=True),
+    )
+    detail = test_client.get(f"/api/products/{ITEM_ID}").json()
+
+    assert detail["enabled"] is True
+    assert detail["data_status"] == "awaiting_baseline"
+    assert detail["snapshots"] == []

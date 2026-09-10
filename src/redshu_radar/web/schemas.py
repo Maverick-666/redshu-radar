@@ -20,3 +20,18 @@ class DecisionUpdate(BaseModel):
     delivery: str | None = None
     notes: str | None = None
     next_action: str | None = None
+
+
+class ProductDetailUpdate(DecisionUpdate):
+    enabled: bool
+    category_id: int | None = None
+    tag_ids: list[int] = Field(default_factory=list)
+
+
+class CategoryCreate(BaseModel):
+    name: str = Field(min_length=1)
+    parent_id: int | None = None
+
+
+class TagCreate(BaseModel):
+    name: str = Field(min_length=1)

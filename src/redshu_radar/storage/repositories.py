@@ -1,3 +1,4 @@
+import sqlite3
 from datetime import datetime
 
 from redshu_radar.domain import (
@@ -157,38 +158,105 @@ class ProductRepository:
     ) -> str | None:
         with self.database.connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
-            product_exists = connection.execute(
-                "SELECT 1 FROM products WHERE item_id = ?", (item_id,)
-            ).fetchone()
-            if product_exists is None:
-                return "product"
-            if category_id is not None:
-                category = connection.execute(
-                    "SELECT parent_id FROM categories WHERE id = ?",
-                    (category_id,),
-                ).fetchone()
-                if category is None or category["parent_id"] is None:
-                    return "category"
-            if tag_ids:
-                placeholders = ", ".join("?" for _ in tag_ids)
-                tag_count = connection.execute(
-                    f"SELECT COUNT(*) FROM tags WHERE id IN ({placeholders})",
-                    tag_ids,
-                ).fetchone()[0]
-                if tag_count != len(tag_ids):
-                    return "tags"
+            error = self._taxonomy_error(
+                connection, item_id, category_id=category_id, tag_ids=tag_ids
+            )
+            if error is not None:
+                return error
             connection.execute(
                 "UPDATE products SET category_id = ? WHERE item_id = ?",
                 (category_id, item_id),
             )
-            connection.execute(
-                "DELETE FROM product_tags WHERE product_id = ?", (item_id,)
-            )
-            connection.executemany(
-                "INSERT INTO product_tags (product_id, tag_id) VALUES (?, ?)",
-                [(item_id, tag_id) for tag_id in tag_ids],
-            )
+            self._replace_tags(connection, item_id, tag_ids)
         return None
+
+    def update_details(
+        self,
+        item_id: str,
+        *,
+        decision_status: str,
+        audience: str | None,
+        scenario: str | None,
+        problem: str | None,
+        delivery: str | None,
+        notes: str | None,
+        next_action: str | None,
+        enabled: bool,
+        category_id: int | None,
+        tag_ids: list[int],
+        updated_at: datetime,
+    ) -> str | None:
+        with self.database.connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            error = self._taxonomy_error(
+                connection, item_id, category_id=category_id, tag_ids=tag_ids
+            )
+            if error is not None:
+                return error
+            connection.execute(
+                """
+                UPDATE products
+                SET decision_status = ?, audience = ?, scenario = ?, problem = ?,
+                    delivery = ?, notes = ?, next_action = ?, enabled = ?,
+                    category_id = ?, updated_at = ?
+                WHERE item_id = ?
+                """,
+                (
+                    decision_status,
+                    audience,
+                    scenario,
+                    problem,
+                    delivery,
+                    notes,
+                    next_action,
+                    int(enabled),
+                    category_id,
+                    _as_iso(updated_at),
+                    item_id,
+                ),
+            )
+            self._replace_tags(connection, item_id, tag_ids)
+        return None
+
+    @staticmethod
+    def _taxonomy_error(
+        connection: sqlite3.Connection,
+        item_id: str,
+        *,
+        category_id: int | None,
+        tag_ids: list[int],
+    ) -> str | None:
+        product_exists = connection.execute(
+            "SELECT 1 FROM products WHERE item_id = ?", (item_id,)
+        ).fetchone()
+        if product_exists is None:
+            return "product"
+        if category_id is not None:
+            category = connection.execute(
+                "SELECT parent_id FROM categories WHERE id = ?", (category_id,)
+            ).fetchone()
+            if category is None or category["parent_id"] is None:
+                return "category"
+        if tag_ids:
+            placeholders = ", ".join("?" for _ in tag_ids)
+            tag_count = connection.execute(
+                f"SELECT COUNT(*) FROM tags WHERE id IN ({placeholders})", tag_ids
+            ).fetchone()[0]
+            if tag_count != len(tag_ids):
+                return "tags"
+        return None
+
+    @staticmethod
+    def _replace_tags(
+        connection: sqlite3.Connection, item_id: str, tag_ids: list[int]
+    ) -> None:
+        connection.execute(
+            "DELETE FROM product_tags WHERE product_id = ?", (item_id,)
+        )
+        connection.executemany(
+            "INSERT INTO product_tags (product_id, tag_id) VALUES (?, ?)",
+            [(item_id, tag_id) for tag_id in tag_ids],
+        )
 
 
 class CategoryRepository:
@@ -237,6 +305,26 @@ class CategoryRepository:
                 "SELECT * FROM categories ORDER BY id"
             ).fetchall()
         return [_category_from_row(row) for row in rows]
+
+    def list_with_product_counts(self) -> list[tuple[Category, int]]:
+        with self.database.connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT categories.*,
+                    CASE WHEN categories.parent_id IS NULL THEN (
+                        SELECT COUNT(*) FROM products
+                        JOIN categories AS child
+                            ON child.id = products.category_id
+                        WHERE child.parent_id = categories.id
+                    ) ELSE (
+                        SELECT COUNT(*) FROM products
+                        WHERE products.category_id = categories.id
+                    ) END AS product_count
+                FROM categories
+                ORDER BY categories.id
+                """
+            ).fetchall()
+        return [(_category_from_row(row), row["product_count"]) for row in rows]
 
 
 class TagRepository:
@@ -292,6 +380,19 @@ class TagRepository:
                 (item_id,),
             ).fetchall()
         return [_tag_from_row(row) for row in rows]
+
+    def list_with_product_counts(self) -> list[tuple[Tag, int]]:
+        with self.database.connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT tags.*, COUNT(product_tags.product_id) AS product_count
+                FROM tags
+                LEFT JOIN product_tags ON product_tags.tag_id = tags.id
+                GROUP BY tags.id
+                ORDER BY tags.id
+                """
+            ).fetchall()
+        return [(_tag_from_row(row), row["product_count"]) for row in rows]
 
 
 class CollectionRepository:

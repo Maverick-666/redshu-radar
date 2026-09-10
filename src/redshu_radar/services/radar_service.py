@@ -4,7 +4,12 @@ from pathlib import Path
 from redshu_radar.analytics.metrics import ProductMetrics, calculate_metrics
 from redshu_radar.analytics.ranking import rank_products
 from redshu_radar.domain import Product, Snapshot
-from redshu_radar.storage.repositories import CollectionRepository, ProductRepository
+from redshu_radar.storage.repositories import (
+    CategoryRepository,
+    CollectionRepository,
+    ProductRepository,
+    TagRepository,
+)
 
 
 class RadarService:
@@ -12,10 +17,14 @@ class RadarService:
         self,
         products: ProductRepository,
         collections: CollectionRepository,
+        categories: CategoryRepository,
+        tags: TagRepository,
         database_path: Path,
     ) -> None:
         self.products = products
         self.collections = collections
+        self.categories = categories
+        self.tags = tags
         self.database_path = database_path
 
     def status(self) -> dict[str, object]:
@@ -85,6 +94,28 @@ class RadarService:
         metrics: ProductMetrics | None,
     ) -> dict[str, object]:
         payload = asdict(product)
+        category = (
+            self.categories.get(product.category_id)
+            if product.category_id is not None
+            else None
+        )
+        track = (
+            self.categories.get(category.parent_id)
+            if category is not None and category.parent_id is not None
+            else None
+        )
+        payload["track"] = (
+            {"id": track.id, "name": track.name} if track is not None else None
+        )
+        payload["subcategory"] = (
+            {"id": category.id, "name": category.name}
+            if category is not None
+            else None
+        )
+        payload["tags"] = [
+            {"id": tag.id, "name": tag.name}
+            for tag in self.tags.list_for_product(product.item_id)
+        ]
         if not snapshots:
             payload.update(
                 {
