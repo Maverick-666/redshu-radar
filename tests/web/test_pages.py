@@ -117,10 +117,71 @@ def test_dashboard_has_add_and_detail_drawers(tmp_path: Path) -> None:
     assert "product.failures" in script.text
 
 
+def test_dashboard_has_compact_taxonomy_filters_and_detail_controls(
+    tmp_path: Path,
+) -> None:
+    response = request(app(tmp_path), "/")
+
+    for element_id in (
+        "track-filter",
+        "subcategory-filter",
+        "tag-filter-menu",
+        "tag-filter-count",
+        "monitor-filter",
+        "detail-track",
+        "detail-subcategory",
+        "detail-tag-options",
+        "monitor-enabled",
+        "create-track-button",
+        "create-subcategory-button",
+        "create-tag-button",
+        "taxonomy-dialog",
+        "taxonomy-name",
+    ):
+        assert f'id="{element_id}"' in response.text
+    assert "未分类" in response.text
+    assert "候选商品" in response.text
+
+
+def test_dashboard_script_combines_taxonomy_search_filters_and_sorting(
+    tmp_path: Path,
+) -> None:
+    script = request(app(tmp_path), "/static/app.js").text
+
+    assert "product.track?.name" in script
+    assert "product.subcategory?.name" in script
+    assert "product.tags.map" in script
+    assert "state.selectedTagIds.every" in script
+    assert "return sortedProducts(products)" in script
+    assert "renderSubcategoryFilter" in script
+    assert "renderTagFilter" in script
+    assert "product.tags.slice(0, 2)" in script
+    assert 'product.tags.length > 2' in script
+    assert 'api("/api/taxonomy")' in script
+
+
+def test_detail_save_uses_atomic_product_update_and_preserves_error_inputs(
+    tmp_path: Path,
+) -> None:
+    script = request(app(tmp_path), "/static/app.js").text
+
+    assert "category_id:" in script
+    assert "tag_ids:" in script
+    assert "enabled:" in script
+    assert "method: \"PATCH\"" in script
+    assert "await Promise.all([loadTaxonomy(), loadProducts()])" in script
+    assert "catch (error)" in script
+    assert "toast(error.message)" in script
+    assert 'api("/api/categories"' in script
+    assert 'api("/api/tags"' in script
+    assert '$("#taxonomy-dialog").showModal()' in script
+    assert "window.prompt" not in script
+
+
 def test_narrow_browser_keeps_toolbar_and_drawers_visible(tmp_path: Path) -> None:
     styles = request(app(tmp_path), "/static/styles.css").text
 
     assert "body { margin: 0; background: var(--bg)" in styles
     assert "@media (max-width: 900px)" in styles
-    assert ".toolbar { flex-wrap: wrap; }" in styles
+    assert ".toolbar-primary { flex-wrap: wrap; }" in styles
     assert ".drawer.wide { width: min(620px, 100vw); }" in styles

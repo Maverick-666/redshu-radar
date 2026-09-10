@@ -3,8 +3,15 @@ const state = {
   filter: "all",
   query: "",
   currentItemId: null,
+  currentProduct: null,
   sortKey: null,
   sortDirection: null,
+  taxonomy: { categories: [], tags: [] },
+  trackFilter: "all",
+  subcategoryFilter: "all",
+  selectedTagIds: [],
+  monitorFilter: "all",
+  taxonomyCreateMode: null,
 };
 
 const $ = (selector) => document.querySelector(selector);
@@ -115,14 +122,48 @@ function updateSortHeaders() {
 function filteredProducts() {
   const query = state.query.toLowerCase();
   const products = state.products.filter((product) => {
-    const matchesQuery = [product.title, product.shop_name, product.item_id]
+    const matchesQuery = [
+      product.title,
+      product.shop_name,
+      product.item_id,
+      product.track?.name,
+      product.subcategory?.name,
+      ...product.tags.map((tag) => tag.name),
+    ]
       .some((value) => String(value || "").toLowerCase().includes(query));
     const matchesFilter = state.filter === "all"
       || product.data_status === state.filter
       || (state.filter === "attention" && ["rollback_suspected", "collection_error"].includes(product.data_status));
-    return matchesQuery && matchesFilter;
+    const matchesTrack = state.trackFilter === "all"
+      || (state.trackFilter === "uncategorized" && product.track == null)
+      || String(product.track?.id) === state.trackFilter;
+    const matchesSubcategory = state.subcategoryFilter === "all"
+      || (state.subcategoryFilter === "uncategorized" && product.subcategory == null)
+      || String(product.subcategory?.id) === state.subcategoryFilter;
+    const matchesTags = state.selectedTagIds.every((tagId) =>
+      product.tags.some((tag) => tag.id === tagId));
+    const matchesMonitoring = state.monitorFilter === "all"
+      || (state.monitorFilter === "enabled" && product.enabled)
+      || (state.monitorFilter === "disabled" && !product.enabled);
+    return matchesQuery && matchesFilter && matchesTrack
+      && matchesSubcategory && matchesTags && matchesMonitoring;
   });
   return sortedProducts(products);
+}
+
+function productTaxonomyMarkup(product) {
+  const category = product.subcategory
+    ? `${product.track?.name || "—"} / ${product.subcategory.name}`
+    : "未分类";
+  const tags = product.tags.slice(0, 2)
+    .map((tag) => `<span class="tag-chip">${escapeHtml(tag.name)}</span>`)
+    .join("");
+  const remaining = product.tags.length > 2
+    ? `<span class="tag-chip">+${product.tags.length - 2}</span>`
+    : "";
+  const monitorClass = product.enabled ? "" : " disabled";
+  const monitorLabel = product.enabled ? "监控中" : "候选";
+  return `<span class="product-taxonomy"><span>${escapeHtml(category)}</span>${tags}${remaining}<span class="monitor-chip${monitorClass}">${monitorLabel}</span></span>`;
 }
 
 function renderProducts() {
@@ -134,7 +175,7 @@ function renderProducts() {
   } else {
     rows.innerHTML = products.map((product) => `
       <tr data-item-id="${escapeHtml(product.item_id)}">
-        <td class="product-name">${escapeHtml(product.title || "等待首次采集")}<span class="product-id">${escapeHtml(product.item_id)}</span></td>
+        <td class="product-name">${escapeHtml(product.title || "等待首次采集")}<span class="product-id">${escapeHtml(product.item_id)}</span>${productTaxonomyMarkup(product)}</td>
         <td>${escapeHtml(product.shop_name || "—")}</td>
         <td>${formatMoney(product.price_cents)}</td>
         <td class="number-strong">${formatDailyDelta(product)}</td>
@@ -168,6 +209,66 @@ async function loadStatus() {
 async function loadProducts() {
   state.products = await api("/api/products");
   renderProducts();
+}
+
+function categoryOptions(categories, selectedValue) {
+  return categories.map((category) =>
+    `<option value="${category.id}"${String(category.id) === String(selectedValue) ? " selected" : ""}>${escapeHtml(category.name)}</option>`
+  ).join("");
+}
+
+function renderSubcategoryFilter() {
+  const selectedTrack = state.trackFilter;
+  const categories = state.taxonomy.categories.filter((category) =>
+    category.parent_id != null
+      && (selectedTrack === "all" || String(category.parent_id) === selectedTrack));
+  const available = new Set(categories.map((category) => String(category.id)));
+  if (!["all", "uncategorized"].includes(state.subcategoryFilter)
+      && !available.has(state.subcategoryFilter)) {
+    state.subcategoryFilter = "all";
+  }
+  $("#subcategory-filter").innerHTML = `
+    <option value="all">全部细分</option>
+    <option value="uncategorized">未分类</option>
+    ${categoryOptions(categories, state.subcategoryFilter)}`;
+  $("#subcategory-filter").value = state.subcategoryFilter;
+}
+
+function renderTagFilter() {
+  $("#tag-filter-count").textContent = state.selectedTagIds.length
+    ? `(${state.selectedTagIds.length})`
+    : "";
+  $("#tag-filter-options").innerHTML = state.taxonomy.tags.length
+    ? state.taxonomy.tags.map((tag) => `
+      <label><input type="checkbox" data-filter-tag-id="${tag.id}"${state.selectedTagIds.includes(tag.id) ? " checked" : ""}> ${escapeHtml(tag.name)} <span>${tag.product_count}</span></label>`).join("")
+    : '<p class="field-help">暂无标签</p>';
+  $$('[data-filter-tag-id]').forEach((checkbox) => {
+    checkbox.addEventListener("change", () => {
+      const tagId = Number(checkbox.dataset.filterTagId);
+      state.selectedTagIds = checkbox.checked
+        ? [...state.selectedTagIds, tagId]
+        : state.selectedTagIds.filter((value) => value !== tagId);
+      renderTagFilter();
+      renderProducts();
+    });
+  });
+}
+
+function renderTaxonomyFilters() {
+  const tracks = state.taxonomy.categories.filter((category) => category.parent_id == null);
+  $("#track-filter").innerHTML = `
+    <option value="all">全部赛道</option>
+    <option value="uncategorized">未分类</option>
+    ${categoryOptions(tracks, state.trackFilter)}`;
+  $("#track-filter").value = state.trackFilter;
+  renderSubcategoryFilter();
+  renderTagFilter();
+}
+
+async function loadTaxonomy() {
+  state.taxonomy = await api("/api/taxonomy");
+  renderTaxonomyFilters();
+  if (state.currentProduct) renderDetailTaxonomy(state.currentProduct);
 }
 
 function openDrawer(selector) {
@@ -244,6 +345,7 @@ async function openDetail(itemId) {
   try {
     const product = await api(`/api/products/${itemId}`);
     state.currentItemId = itemId;
+    state.currentProduct = product;
     $("#detail-title").textContent = product.title || "等待首次采集";
     $("#detail-shop").textContent = `${product.shop_name || "未知店铺"} · ${itemId}`;
     $("#detail-metrics").innerHTML = [
@@ -258,6 +360,7 @@ async function openDetail(itemId) {
     $("#decision-status").value = product.decision_status;
     ["audience", "scenario", "problem", "delivery", "notes"].forEach((field) => { $(`#${field}`).value = product[field] || ""; });
     $("#next-action").value = product.next_action || "";
+    renderDetailTaxonomy(product);
     $("#snapshot-list").innerHTML = product.snapshots.length
       ? [...product.snapshots].reverse().map((snapshot) => {
         const roles = [];
@@ -270,14 +373,52 @@ async function openDetail(itemId) {
     $("#failure-list").innerHTML = product.failures.length
       ? product.failures.map((failure) => `<div class="snapshot-item"><span>${new Date(failure.attempted_at).toLocaleString("zh-CN")}</span><span>${escapeHtml(failure.error_type)}</span><span>${escapeHtml(failure.error_message)}</span></div>`).join("")
       : '<p class="field-help">暂无采集失败。</p>';
+    $("#detail-drawer .drawer-body").scrollTop = 0;
     openDrawer("#detail-drawer");
   } catch (error) {
     toast(error.message);
   }
 }
 
-async function saveDecision() {
+function renderDetailSubcategories(selectedId = null) {
+  const trackId = Number($("#detail-track").value);
+  const categories = state.taxonomy.categories.filter((category) =>
+    category.parent_id === trackId);
+  $("#detail-subcategory").innerHTML = `
+    <option value="">未分类</option>
+    ${categoryOptions(categories, selectedId)}`;
+  $("#detail-subcategory").disabled = !trackId;
+}
+
+function renderDetailTags(selectedIds = []) {
+  const selected = new Set(selectedIds.map(Number));
+  $("#detail-tag-options").innerHTML = state.taxonomy.tags.length
+    ? state.taxonomy.tags.map((tag) => `
+      <label><input type="checkbox" data-detail-tag-id="${tag.id}"${selected.has(tag.id) ? " checked" : ""}> ${escapeHtml(tag.name)}</label>`).join("")
+    : '<p class="field-help">暂无标签，可用右上角“＋标签”创建。</p>';
+}
+
+function renderDetailTaxonomy(product) {
+  const tracks = state.taxonomy.categories.filter((category) => category.parent_id == null);
+  const trackId = product.track?.id || "";
+  $("#detail-track").innerHTML = `
+    <option value="">未分类</option>
+    ${categoryOptions(tracks, trackId)}`;
+  $("#detail-track").value = String(trackId);
+  renderDetailSubcategories(product.subcategory?.id || null);
+  $("#detail-subcategory").value = product.subcategory?.id || "";
+  renderDetailTags(product.tags.map((tag) => tag.id));
+  $("#monitor-enabled").checked = product.enabled;
+}
+
+async function saveProductSettings() {
   if (!state.currentItemId) return;
+  const trackValue = $("#detail-track").value;
+  const categoryValue = $("#detail-subcategory").value;
+  if (trackValue && !categoryValue) {
+    toast("请选择细分品类，或将赛道设为未分类");
+    return;
+  }
   const payload = {
     decision_status: $("#decision-status").value,
     audience: $("#audience").value || null,
@@ -286,23 +427,119 @@ async function saveDecision() {
     delivery: $("#delivery").value || null,
     notes: $("#notes").value || null,
     next_action: $("#next-action").value || null,
+    enabled: $("#monitor-enabled").checked,
+    category_id: categoryValue ? Number(categoryValue) : null,
+    tag_ids: $$('[data-detail-tag-id]:checked').map((checkbox) =>
+      Number(checkbox.dataset.detailTagId)),
   };
   try {
-    await api(`/api/products/${state.currentItemId}/decision`, { method: "PATCH", body: JSON.stringify(payload) });
-    await loadProducts();
-    toast("人工判断已保存");
+    state.currentProduct = await api(`/api/products/${state.currentItemId}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    });
+    await Promise.all([loadTaxonomy(), loadProducts()]);
+    toast("商品设置已保存");
   } catch (error) {
     toast(error.message);
   }
 }
 
+function selectedDetailTagIds() {
+  return $$('[data-detail-tag-id]:checked')
+    .map((checkbox) => Number(checkbox.dataset.detailTagId));
+}
+
+function openTaxonomyDialog(mode) {
+  if (mode === "subcategory" && !Number($("#detail-track").value)) {
+    toast("请先选择或创建赛道");
+    return;
+  }
+  const labels = {
+    track: ["新建赛道", "用于组织一组细分品类"],
+    subcategory: ["新建细分品类", "将创建在当前赛道下"],
+    tag: ["新建标签", "标签可跨赛道复用"],
+  };
+  state.taxonomyCreateMode = mode;
+  $("#taxonomy-dialog-title").textContent = labels[mode][0];
+  $("#taxonomy-dialog-help").textContent = labels[mode][1];
+  $("#taxonomy-name").value = "";
+  $("#taxonomy-dialog").showModal();
+  $("#taxonomy-name").focus();
+}
+
+async function createTaxonomy(event) {
+  event.preventDefault();
+  const name = $("#taxonomy-name").value.trim();
+  if (!name) return;
+  const mode = state.taxonomyCreateMode;
+  const selectedTrackId = Number($("#detail-track").value) || null;
+  const selectedCategoryId = Number($("#detail-subcategory").value) || null;
+  const selectedTagIds = selectedDetailTagIds();
+  const enabled = $("#monitor-enabled").checked;
+  const confirmButton = $("#taxonomy-dialog-confirm");
+  confirmButton.disabled = true;
+  try {
+    const created = mode === "tag"
+      ? await api("/api/tags", {
+        method: "POST",
+        body: JSON.stringify({ name }),
+      })
+      : await api("/api/categories", {
+        method: "POST",
+        body: JSON.stringify({
+          name,
+          parent_id: mode === "subcategory" ? selectedTrackId : null,
+        }),
+      });
+    await loadTaxonomy();
+    const trackId = mode === "track" ? created.id : selectedTrackId;
+    const categoryId = mode === "track"
+      ? null
+      : (mode === "subcategory" ? created.id : selectedCategoryId);
+    $("#detail-track").value = trackId ? String(trackId) : "";
+    renderDetailSubcategories(categoryId);
+    $("#detail-subcategory").value = categoryId ? String(categoryId) : "";
+    renderDetailTags(mode === "tag" ? [...selectedTagIds, created.id] : selectedTagIds);
+    $("#monitor-enabled").checked = enabled;
+    $("#taxonomy-dialog").close();
+    toast(`${labelsForCreation(mode)}已创建`);
+  } catch (error) {
+    toast(error.message);
+  } finally {
+    confirmButton.disabled = false;
+  }
+}
+
+function labelsForCreation(mode) {
+  return { track: "赛道", subcategory: "细分品类", tag: "标签" }[mode];
+}
+
 $("#add-button").addEventListener("click", () => openDrawer("#add-drawer"));
 $("#collect-button").addEventListener("click", collectNow);
 $("#import-button").addEventListener("click", importProducts);
-$("#save-decision-button").addEventListener("click", saveDecision);
+$("#save-decision-button").addEventListener("click", saveProductSettings);
+$("#create-track-button").addEventListener("click", () => openTaxonomyDialog("track"));
+$("#create-subcategory-button").addEventListener("click", () => openTaxonomyDialog("subcategory"));
+$("#create-tag-button").addEventListener("click", () => openTaxonomyDialog("tag"));
+$("#taxonomy-create-form").addEventListener("submit", createTaxonomy);
+$("#taxonomy-dialog-cancel").addEventListener("click", () => $("#taxonomy-dialog").close());
+$("#detail-track").addEventListener("change", () => renderDetailSubcategories());
 $("#drawer-backdrop").addEventListener("click", closeDrawers);
 $$('[data-close-drawer]').forEach((button) => button.addEventListener("click", closeDrawers));
 $("#search-input").addEventListener("input", (event) => { state.query = event.target.value; renderProducts(); });
+$("#track-filter").addEventListener("change", (event) => {
+  state.trackFilter = event.target.value;
+  renderSubcategoryFilter();
+  renderProducts();
+});
+$("#subcategory-filter").addEventListener("change", (event) => {
+  state.subcategoryFilter = event.target.value;
+  renderProducts();
+});
+$("#monitor-filter").addEventListener("change", (event) => {
+  state.monitorFilter = event.target.value;
+  renderProducts();
+});
 $$('.filter').forEach((button) => button.addEventListener("click", () => {
   $$('.filter').forEach((item) => item.classList.remove("active"));
   button.classList.add("active");
@@ -322,4 +559,10 @@ $$(".sort-button").forEach((button) => button.addEventListener("click", () => {
   renderProducts();
 }));
 
-Promise.all([loadStatus(), loadProducts()]).catch((error) => toast(error.message));
+Promise.all([
+  loadStatus(),
+  (async () => {
+    await loadTaxonomy();
+    await loadProducts();
+  })(),
+]).catch((error) => toast(error.message));

@@ -52,10 +52,20 @@ nav { display: grid; gap: 7px; }
 .summary-chips span { padding: 8px 11px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); color: var(--muted); font-size: 12px; }
 .summary-chips b { color: var(--text); }
 
-.toolbar { display: flex; gap: 12px; align-items: center; padding: 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.toolbar { display: grid; gap: 12px; padding: 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.toolbar-primary, .toolbar-filters { display: flex; gap: 12px; align-items: center; justify-content: space-between; }
 .search-box { min-width: 280px; flex: 1; display: flex; align-items: center; gap: 8px; padding: 0 12px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface-soft); }
 .search-box input { width: 100%; padding: 10px 0; border: 0; outline: 0; background: transparent; color: var(--text); }
 .filter-group, .actions { display: flex; gap: 7px; }
+.taxonomy-filters { display: flex; gap: 8px; align-items: end; flex-wrap: wrap; }
+.taxonomy-filters > label { display: grid; gap: 4px; color: var(--muted); font-size: 10px; font-weight: 700; }
+.taxonomy-filters select, .filter-menu summary { min-width: 118px; padding: 7px 9px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface-soft); color: var(--text); font-size: 12px; }
+.filter-menu { position: relative; }
+.filter-menu summary { min-width: 96px; list-style: none; cursor: pointer; }
+.filter-menu summary::-webkit-details-marker { display: none; }
+.filter-menu-options { position: absolute; z-index: 10; top: calc(100% + 6px); left: 0; width: 210px; max-height: 240px; overflow: auto; display: grid; gap: 4px; padding: 9px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); box-shadow: var(--shadow); }
+.filter-menu-options label, .tag-options label { display: inline-flex !important; flex-direction: row; align-items: center; gap: 7px; padding: 5px; color: var(--text); font-size: 12px; font-weight: 500; }
+.filter-menu-options input, .tag-options input, .monitor-toggle input { width: auto; }
 .filter { padding: 8px 10px; border: 0; border-radius: 7px; background: transparent; color: var(--muted); }
 .filter.active { background: var(--green-soft); color: var(--green-dark); font-weight: 700; }
 .button { padding: 9px 14px; border-radius: 8px; border: 1px solid var(--line); font-weight: 700; }
@@ -78,6 +88,10 @@ tbody tr:not(.empty-row) { cursor: pointer; }
 tbody tr:not(.empty-row):hover { background: #f6faf7; }
 .product-name { min-width: 210px; font-weight: 750; }
 .product-id { display: block; margin-top: 4px; color: var(--muted); font-family: ui-monospace, monospace; font-size: 10px; }
+.product-taxonomy { display: flex; gap: 5px; align-items: center; flex-wrap: wrap; margin-top: 6px; color: var(--muted); font-size: 10px; font-weight: 500; }
+.tag-chip { display: inline-flex; padding: 2px 5px; border-radius: 999px; background: var(--green-soft); color: var(--green-dark); }
+.monitor-chip { color: var(--green-dark); }
+.monitor-chip.disabled { color: var(--amber); }
 .number-strong { color: var(--green-dark); font-weight: 800; }
 .status-badge { display: inline-flex; align-items: center; padding: 4px 7px; border-radius: 999px; background: var(--green-soft); color: var(--green-dark); font-size: 11px; font-weight: 700; white-space: nowrap; }
 .status-badge.waiting { background: var(--amber-soft); color: var(--amber); }
@@ -107,14 +121,29 @@ textarea:focus, input:focus, select:focus { border-color: var(--green); box-shad
 .metric strong { display: block; margin-top: 5px; font-size: 17px; }
 .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 13px; }
 .span-two { grid-column: span 2; }
+.section-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.inline-actions { display: flex; gap: 5px; }
+.text-button { padding: 4px 6px; border: 0; background: transparent; color: var(--green-dark); font-size: 11px; font-weight: 700; }
+.taxonomy-editor { margin-bottom: 22px; }
+.monitor-toggle { grid-column: span 2; align-self: end; display: flex !important; grid-auto-flow: column; justify-content: start; align-items: center; min-height: 39px; }
+.tag-fieldset { margin: 0; padding: 8px; border: 1px solid var(--line); border-radius: 8px; }
+.tag-fieldset legend { padding: 0 5px; color: #425047; font-size: 12px; font-weight: 700; }
+.tag-options { max-height: 140px; overflow: auto; display: flex; flex-wrap: wrap; gap: 3px 8px; }
 .snapshot-list { display: grid; gap: 8px; }
 .snapshot-item { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; padding: 10px; border-radius: 8px; background: var(--surface-soft); color: var(--muted); font-size: 12px; }
 .toast { position: fixed; z-index: 30; right: 24px; bottom: 24px; max-width: 360px; padding: 12px 15px; border-radius: 9px; background: #173d29; color: #fff; box-shadow: var(--shadow); }
+.taxonomy-dialog { width: min(390px, calc(100vw - 28px)); padding: 0; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--text); box-shadow: var(--shadow); }
+.taxonomy-dialog::backdrop { background: rgba(16, 28, 21, .35); }
+.taxonomy-dialog form { display: grid; gap: 13px; padding: 22px; }
+.taxonomy-dialog h3, .taxonomy-dialog p { margin: 0; }
+.taxonomy-dialog label { display: grid; gap: 7px; color: #425047; font-size: 12px; font-weight: 700; }
+.dialog-actions { display: flex; justify-content: flex-end; gap: 8px; }
 
 @media (max-width: 1250px) {
   .app-shell { grid-template-columns: 210px minmax(0, 1fr); }
   .workspace { padding-left: 22px; padding-right: 22px; }
-  .filter-group { display: none; }
+  .toolbar-filters { align-items: flex-start; flex-direction: column; }
+  .filter-group { flex-wrap: wrap; }
 }
 
 @media (max-width: 900px) {
@@ -124,7 +153,7 @@ textarea:focus, input:focus, select:focus { border-color: var(--green); box-shad
   .system-strip { width: 100%; gap: 12px; flex-wrap: wrap; }
   .page-heading { align-items: flex-start; flex-direction: column; gap: 14px; }
   .summary-chips { flex-wrap: wrap; }
-  .toolbar { flex-wrap: wrap; }
+  .toolbar-primary { flex-wrap: wrap; }
   .search-box { min-width: 100%; flex-basis: 100%; }
   .actions { margin-left: auto; }
   .drawer { width: min(430px, 100vw); }

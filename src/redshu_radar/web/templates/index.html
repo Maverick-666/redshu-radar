@@ -54,20 +54,33 @@
         </section>
 
         <section class="toolbar" aria-label="看板工具">
-          <label class="search-box">
-            <span>⌕</span>
-            <input id="search-input" type="search" placeholder="搜索商品、店铺或商品 ID">
-          </label>
-          <div class="filter-group" role="group" aria-label="数据筛选">
-            <button class="filter active" type="button" data-filter="all">全部</button>
-            <button class="filter" type="button" data-filter="complete_daily">完整日级</button>
-            <button class="filter" type="button" data-filter="awaiting_baseline">待基线</button>
-            <button class="filter" type="button" data-filter="cross_period">跨期</button>
-            <button class="filter" type="button" data-filter="attention">异常</button>
+          <div class="toolbar-primary">
+            <label class="search-box">
+              <span>⌕</span>
+              <input id="search-input" type="search" placeholder="搜索商品、店铺、ID、分类或标签">
+            </label>
+            <div class="actions">
+              <button id="collect-button" class="button secondary" type="button">立即采集</button>
+              <button id="add-button" class="button primary" type="button">＋ 添加商品</button>
+            </div>
           </div>
-          <div class="actions">
-            <button id="collect-button" class="button secondary" type="button">立即采集</button>
-            <button id="add-button" class="button primary" type="button">＋ 添加商品</button>
+          <div class="toolbar-filters">
+            <div class="taxonomy-filters" aria-label="分类筛选">
+              <label>赛道<select id="track-filter"><option value="all">全部赛道</option><option value="uncategorized">未分类</option></select></label>
+              <label>细分品类<select id="subcategory-filter"><option value="all">全部细分</option><option value="uncategorized">未分类</option></select></label>
+              <details id="tag-filter-menu" class="filter-menu">
+                <summary>标签 <span id="tag-filter-count"></span></summary>
+                <div id="tag-filter-options" class="filter-menu-options"></div>
+              </details>
+              <label>监控<select id="monitor-filter"><option value="all">全部状态</option><option value="enabled">监控中</option><option value="disabled">候选商品</option></select></label>
+            </div>
+            <div class="filter-group" role="group" aria-label="数据筛选">
+              <button class="filter active" type="button" data-filter="all">全部</button>
+              <button class="filter" type="button" data-filter="complete_daily">完整日级</button>
+              <button class="filter" type="button" data-filter="awaiting_baseline">待基线</button>
+              <button class="filter" type="button" data-filter="cross_period">跨期</button>
+              <button class="filter" type="button" data-filter="attention">异常</button>
+            </div>
           </div>
         </section>
 
@@ -129,6 +142,13 @@
       </div>
       <div class="drawer-body">
         <div id="detail-metrics" class="metric-grid"></div>
+        <div class="section-heading"><h3>分类与监控</h3><div class="inline-actions"><button id="create-track-button" class="text-button" type="button">＋赛道</button><button id="create-subcategory-button" class="text-button" type="button">＋细分</button><button id="create-tag-button" class="text-button" type="button">＋标签</button></div></div>
+        <div class="form-grid taxonomy-editor">
+          <label class="monitor-toggle"><input id="monitor-enabled" type="checkbox"> 每日监控</label>
+          <label>赛道<select id="detail-track"><option value="">未分类</option></select></label>
+          <label>细分品类<select id="detail-subcategory"><option value="">未分类</option></select></label>
+          <fieldset class="span-two tag-fieldset"><legend>标签</legend><div id="detail-tag-options" class="tag-options"></div></fieldset>
+        </div>
         <h3>人工判断</h3>
         <div class="form-grid">
           <label>阶段<select id="decision-status"><option value="watching">观察</option><option value="reviewing">复核</option><option value="testing">测试</option><option value="dropped">放弃</option><option value="scaling">放大</option></select></label>
@@ -146,9 +166,21 @@
       </div>
       <div class="drawer-footer">
         <button class="button ghost" type="button" data-close-drawer>关闭</button>
-        <button id="save-decision-button" class="button primary" type="button">保存判断</button>
+        <button id="save-decision-button" class="button primary" type="button">保存商品设置</button>
       </div>
     </aside>
+
+    <dialog id="taxonomy-dialog" class="taxonomy-dialog" aria-labelledby="taxonomy-dialog-title">
+      <form id="taxonomy-create-form">
+        <h3 id="taxonomy-dialog-title">新建分类</h3>
+        <p id="taxonomy-dialog-help" class="field-help"></p>
+        <label>名称<input id="taxonomy-name" type="text" autocomplete="off" required></label>
+        <div class="dialog-actions">
+          <button id="taxonomy-dialog-cancel" class="button ghost" type="button">取消</button>
+          <button id="taxonomy-dialog-confirm" class="button primary" type="submit">创建</button>
+        </div>
+      </form>
+    </dialog>
 
     <div id="toast" class="toast" hidden></div>
     <script src="/static/app.js" defer></script>
