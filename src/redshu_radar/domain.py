@@ -19,6 +19,7 @@ class Product:
     delivery: str | None
     notes: str | None
     next_action: str | None
+    category_id: int | None = None
 
 
 @dataclass(frozen=True)

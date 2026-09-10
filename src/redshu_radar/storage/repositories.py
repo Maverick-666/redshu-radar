@@ -22,6 +22,7 @@ def _product_from_row(row: object) -> Product:
         observed_since=_as_datetime(row["observed_since"]),
         enabled=bool(row["enabled"]),
         decision_status=row["decision_status"],
+        category_id=row["category_id"],
         title=row["title"],
         shop_id=row["shop_id"],
         shop_name=row["shop_name"],
