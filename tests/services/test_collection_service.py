@@ -66,6 +66,31 @@ def test_batch_continues_after_one_product_fails(tmp_path: Path) -> None:
     assert [attempt.succeeded for attempt in attempts] == [True, False]
 
 
+def test_collection_can_target_only_newly_imported_products(tmp_path: Path) -> None:
+    now = datetime(2026, 9, 9, 0, 2, tzinfo=UTC)
+    database = Database(tmp_path / "radar.sqlite3")
+    database.initialize()
+    products = ProductRepository(database)
+    collections = CollectionRepository(database)
+    products.add("a" * 24, "a" * 24, None, now)
+    products.add("b" * 24, "b" * 24, None, now)
+    collector = FakeCollector(
+        {
+            "a" * 24: collected("a" * 24, 100),
+            "b" * 24: collected("b" * 24, 200),
+        }
+    )
+
+    summary = CollectionService(products, collections, collector).collect_all(
+        "manual", captured_at=now, item_ids=["b" * 24]
+    )
+
+    assert summary.success_count == 1
+    assert collector.calls == ["b" * 24]
+    assert collections.snapshots_for("a" * 24) == []
+    assert len(collections.snapshots_for("b" * 24)) == 1
+
+
 def test_reported_sales_rollback_keeps_trusted_high_water(tmp_path: Path) -> None:
     now = datetime(2026, 9, 9, 0, 2, tzinfo=UTC)
     database = Database(tmp_path / "radar.sqlite3")

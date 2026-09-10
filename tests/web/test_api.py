@@ -180,6 +180,25 @@ def test_manual_collection_updates_status_and_product_snapshot(tmp_path: Path) -
     assert detail["snapshots"][0]["sold_reported"] == 100
 
 
+def test_manual_collection_accepts_a_product_subset(tmp_path: Path) -> None:
+    test_client = client(tmp_path)
+    other_item_id = "b" * 24
+    test_client.post(
+        "/api/products/import",
+        json={"input_text": f"{ITEM_ID}\n{other_item_id}"},
+    )
+
+    response = test_client.post(
+        "/api/collections",
+        json={"trigger": "manual", "item_ids": [other_item_id]},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["success_count"] == 1
+    assert test_client.get(f"/api/products/{ITEM_ID}").json()["snapshots"] == []
+    assert len(test_client.get(f"/api/products/{other_item_id}").json()["snapshots"]) == 1
+
+
 def test_collection_rejects_unknown_trigger(tmp_path: Path) -> None:
     response = client(tmp_path).post(
         "/api/collections", json={"trigger": "whenever"}

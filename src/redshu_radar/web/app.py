@@ -84,7 +84,9 @@ def create_app(
     @app.post("/api/collections")
     def collect(request: CollectionRequest) -> object:
         return collection_service.collect_all(
-            request.trigger, captured_at=active_clock()
+            request.trigger,
+            captured_at=active_clock(),
+            item_ids=request.item_ids,
         )
 
     return app

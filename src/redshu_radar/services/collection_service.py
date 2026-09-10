@@ -24,13 +24,23 @@ class CollectionService:
         self.collections = collections
         self.collector = collector
 
-    def collect_all(self, trigger: str, *, captured_at: datetime) -> CollectionSummary:
+    def collect_all(
+        self,
+        trigger: str,
+        *,
+        captured_at: datetime,
+        item_ids: list[str] | None = None,
+    ) -> CollectionSummary:
         run_id = self.collections.start_run(trigger, captured_at)
         success_count = 0
         failure_count = 0
+        selected_item_ids = set(item_ids) if item_ids is not None else None
 
         for product in self.products.list_all():
-            if not product.enabled:
+            if not product.enabled or (
+                selected_item_ids is not None
+                and product.item_id not in selected_item_ids
+            ):
                 continue
             try:
                 collected = self.collector.collect(product.item_id)

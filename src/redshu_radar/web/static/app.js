@@ -32,6 +32,12 @@ function formatValue(value, prefix = "") {
   return value == null ? "—" : `${prefix}${value}`;
 }
 
+function formatDailyDelta(product) {
+  return product.data_status === "complete_daily"
+    ? formatValue(product.sales_delta, "+")
+    : "—";
+}
+
 function formatBytes(bytes) {
   if (!bytes) return "0 KB";
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
@@ -83,7 +89,7 @@ function renderProducts() {
         <td class="product-name">${escapeHtml(product.title || "等待首次采集")}<span class="product-id">${escapeHtml(product.item_id)}</span></td>
         <td>${escapeHtml(product.shop_name || "—")}</td>
         <td>${formatMoney(product.price_cents)}</td>
-        <td class="number-strong">${formatValue(product.sales_delta, "+")}</td>
+        <td class="number-strong">${formatDailyDelta(product)}</td>
         <td>${formatValue(product.hourly_delta, "+")}</td>
         <td>${formatValue(product.trusted_high_water)}</td>
         <td>${formatValue(product.hotness)}</td>
@@ -95,6 +101,7 @@ function renderProducts() {
   $("#visible-count").textContent = `${products.length} 个商品`;
   $("#product-count").textContent = state.products.length;
   $("#complete-count").textContent = state.products.filter((p) => p.data_status === "complete_daily").length;
+  $("#awaiting-count").textContent = state.products.filter((p) => p.data_status === "awaiting_baseline").length;
   $("#attention-count").textContent = state.products.filter((p) => ["rollback_suspected", "collection_error"].includes(p.data_status)).length;
   $$("#product-rows tr[data-item-id]").forEach((row) => {
     row.addEventListener("click", () => openDetail(row.dataset.itemId));
@@ -149,9 +156,15 @@ async function importProducts() {
       <div class="result-item ${result.status === "error" ? "error" : ""}">
         第 ${result.line_number} 行 · ${escapeHtml(result.item_id || result.original_input)} · ${escapeHtml(result.status === "ready" ? "已加入" : result.message)}
       </div>`).join("");
-    if (results.some((result) => result.status === "ready")) {
+    const readyItemIds = results
+      .filter((result) => result.status === "ready")
+      .map((result) => result.item_id);
+    if (readyItemIds.length) {
       button.textContent = "建立首次基线…";
-      await api("/api/collections", { method: "POST", body: JSON.stringify({ trigger: "manual" }) });
+      await api("/api/collections", {
+        method: "POST",
+        body: JSON.stringify({ trigger: "manual", item_ids: readyItemIds }),
+      });
     }
     await Promise.all([loadProducts(), loadStatus()]);
     toast("导入处理完成");
@@ -187,7 +200,7 @@ async function openDetail(itemId) {
     $("#detail-shop").textContent = `${product.shop_name || "未知店铺"} · ${itemId}`;
     $("#detail-metrics").innerHTML = [
       ["当前价格", formatMoney(product.price_cents)],
-      ["24h 增量", formatValue(product.sales_delta, "+")],
+      ["24h 增量", formatDailyDelta(product)],
       ["累计已售", formatValue(product.trusted_high_water)],
       ["爆品值", formatValue(product.hotness)],
       ["商品价值", product.product_value == null ? "—" : `¥${product.product_value}`],

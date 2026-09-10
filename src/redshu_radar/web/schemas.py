@@ -9,6 +9,7 @@ class ImportRequest(BaseModel):
 
 class CollectionRequest(BaseModel):
     trigger: Literal["daily", "hourly", "manual", "recovery"] = "manual"
+    item_ids: list[str] | None = None
 
 
 class DecisionUpdate(BaseModel):

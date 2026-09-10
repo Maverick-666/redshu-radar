@@ -49,6 +49,10 @@ def test_dashboard_contains_core_workflow_and_no_demo_rows(tmp_path: Path) -> No
     assert "添加商品" in response.text
     assert "24h 增量" in response.text
     assert "商品价值" in response.text
+    assert 'id="awaiting-count"' in response.text
+    assert 'id="attention-count"' in response.text
+    assert "待基线" in response.text
+    assert "异常" in response.text
     assert 'data-filter="cross_period"' in response.text
     assert "暂无商品" in response.text
     assert "开学第一课 PPT" not in response.text
@@ -72,6 +76,10 @@ def test_dashboard_links_static_assets(tmp_path: Path) -> None:
     assert "baseline_snapshot_id" in script.text
     assert "current_snapshot_id" in script.text
     assert "interval_hours" in script.text
+    assert 'data_status === "complete_daily"' in script.text
+    assert 'const readyItemIds = results' in script.text
+    assert 'item_ids: readyItemIds' in script.text
+    assert '$("#awaiting-count")' in script.text
 
 
 def test_dashboard_has_add_and_detail_drawers(tmp_path: Path) -> None:
