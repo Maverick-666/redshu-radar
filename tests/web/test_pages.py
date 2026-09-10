@@ -58,6 +58,21 @@ def test_dashboard_contains_core_workflow_and_no_demo_rows(tmp_path: Path) -> No
     assert "开学第一课 PPT" not in response.text
 
 
+def test_dashboard_exposes_sortable_numeric_columns(tmp_path: Path) -> None:
+    response = request(app(tmp_path), "/")
+
+    for key in (
+        "price_cents",
+        "sales_delta",
+        "hourly_delta",
+        "trusted_high_water",
+        "hotness",
+        "product_value",
+    ):
+        assert f'data-sort-key="{key}"' in response.text
+    assert response.text.count('aria-sort="none"') == 6
+
+
 def test_dashboard_links_static_assets(tmp_path: Path) -> None:
     application = app(tmp_path)
     page = request(application, "/")
@@ -80,6 +95,12 @@ def test_dashboard_links_static_assets(tmp_path: Path) -> None:
     assert 'const readyItemIds = results' in script.text
     assert 'item_ids: readyItemIds' in script.text
     assert '$("#awaiting-count")' in script.text
+    assert "function sortedProducts" in script.text
+    assert "function updateSortHeaders" in script.text
+    assert 'data_status !== "complete_daily"' in script.text
+    assert 'state.sortDirection === "descending"' in script.text
+    assert '? "ascending"' in script.text
+    assert ".sort-button" in styles.text
 
 
 def test_dashboard_has_add_and_detail_drawers(tmp_path: Path) -> None:

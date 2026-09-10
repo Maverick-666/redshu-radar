@@ -1,4 +1,11 @@
-const state = { products: [], filter: "all", query: "", currentItemId: null };
+const state = {
+  products: [],
+  filter: "all",
+  query: "",
+  currentItemId: null,
+  sortKey: null,
+  sortDirection: null,
+};
 
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
@@ -66,9 +73,48 @@ function statusBadge(status) {
   return `<span class="status-badge ${style}">${escapeHtml(label)}</span>`;
 }
 
+function sortableValue(product, key) {
+  if (key === "sales_delta" && product.data_status !== "complete_daily") {
+    return null;
+  }
+  if (product[key] == null || (typeof product[key] === "string" && !product[key].trim())) return null;
+  const value = Number(product[key]);
+  return Number.isFinite(value) ? value : null;
+}
+
+function sortedProducts(products) {
+  if (!state.sortKey) return products;
+  return products
+    .map((product, index) => ({ product, index }))
+    .sort((left, right) => {
+      const leftValue = sortableValue(left.product, state.sortKey);
+      const rightValue = sortableValue(right.product, state.sortKey);
+      if (leftValue == null && rightValue == null) return left.index - right.index;
+      if (leftValue == null) return 1;
+      if (rightValue == null) return -1;
+      if (leftValue === rightValue) return left.index - right.index;
+      const difference = leftValue - rightValue;
+      return state.sortDirection === "descending" ? -difference : difference;
+    })
+    .map(({ product }) => product);
+}
+
+function updateSortHeaders() {
+  $$(".sort-button").forEach((button) => {
+    const active = button.dataset.sortKey === state.sortKey;
+    button.closest("th").setAttribute(
+      "aria-sort",
+      active ? state.sortDirection : "none",
+    );
+    button.querySelector(".sort-indicator").textContent = active
+      ? (state.sortDirection === "descending" ? "↓" : "↑")
+      : "";
+  });
+}
+
 function filteredProducts() {
   const query = state.query.toLowerCase();
-  return state.products.filter((product) => {
+  const products = state.products.filter((product) => {
     const matchesQuery = [product.title, product.shop_name, product.item_id]
       .some((value) => String(value || "").toLowerCase().includes(query));
     const matchesFilter = state.filter === "all"
@@ -76,10 +122,12 @@ function filteredProducts() {
       || (state.filter === "attention" && ["rollback_suspected", "collection_error"].includes(product.data_status));
     return matchesQuery && matchesFilter;
   });
+  return sortedProducts(products);
 }
 
 function renderProducts() {
   const products = filteredProducts();
+  updateSortHeaders();
   const rows = $("#product-rows");
   if (!products.length) {
     rows.innerHTML = '<tr class="empty-row"><td colspan="10">暂无商品，先添加第一批候选。</td></tr>';
@@ -259,6 +307,18 @@ $$('.filter').forEach((button) => button.addEventListener("click", () => {
   $$('.filter').forEach((item) => item.classList.remove("active"));
   button.classList.add("active");
   state.filter = button.dataset.filter;
+  renderProducts();
+}));
+$$(".sort-button").forEach((button) => button.addEventListener("click", () => {
+  const key = button.dataset.sortKey;
+  if (state.sortKey === key) {
+    state.sortDirection = state.sortDirection === "descending"
+      ? "ascending"
+      : "descending";
+  } else {
+    state.sortKey = key;
+    state.sortDirection = "descending";
+  }
   renderProducts();
 }));
 

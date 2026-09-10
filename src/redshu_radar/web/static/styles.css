@@ -69,6 +69,10 @@ nav { display: grid; gap: 7px; }
 .table-scroll { overflow: auto; min-height: 420px; }
 table { width: 100%; border-collapse: collapse; font-size: 13px; }
 th { padding: 14px 12px; color: #536158; font-weight: 700; text-align: left; white-space: nowrap; background: var(--surface-soft); border-bottom: 1px solid var(--line); }
+.sort-button { display: inline-flex; align-items: center; gap: 4px; padding: 0; border: 0; background: transparent; color: inherit; font: inherit; cursor: pointer; }
+.sort-button:hover { color: var(--green); }
+.sort-button:focus-visible { outline: 2px solid var(--green); outline-offset: 3px; border-radius: 2px; }
+.sort-indicator { min-width: 1em; color: var(--green); }
 td { padding: 15px 12px; border-bottom: 1px solid #edf2ee; vertical-align: middle; }
 tbody tr:not(.empty-row) { cursor: pointer; }
 tbody tr:not(.empty-row):hover { background: #f6faf7; }
