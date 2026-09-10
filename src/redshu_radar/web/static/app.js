@@ -219,17 +219,20 @@ function categoryOptions(categories, selectedValue) {
 
 function renderSubcategoryFilter() {
   const selectedTrack = state.trackFilter;
+  const includeUncategorized = ["all", "uncategorized"].includes(selectedTrack);
   const categories = state.taxonomy.categories.filter((category) =>
     category.parent_id != null
       && (selectedTrack === "all" || String(category.parent_id) === selectedTrack));
   const available = new Set(categories.map((category) => String(category.id)));
-  if (!["all", "uncategorized"].includes(state.subcategoryFilter)
+  if (state.subcategoryFilter === "uncategorized" && !includeUncategorized) {
+    state.subcategoryFilter = "all";
+  } else if (!["all", "uncategorized"].includes(state.subcategoryFilter)
       && !available.has(state.subcategoryFilter)) {
     state.subcategoryFilter = "all";
   }
   $("#subcategory-filter").innerHTML = `
     <option value="all">全部细分</option>
-    <option value="uncategorized">未分类</option>
+    ${includeUncategorized ? '<option value="uncategorized">未分类</option>' : ""}
     ${categoryOptions(categories, state.subcategoryFilter)}`;
   $("#subcategory-filter").value = state.subcategoryFilter;
 }
@@ -432,6 +435,10 @@ async function saveProductSettings() {
     tag_ids: $$('[data-detail-tag-id]:checked').map((checkbox) =>
       Number(checkbox.dataset.detailTagId)),
   };
+  const button = $("#save-decision-button");
+  const originalLabel = button.textContent;
+  button.disabled = true;
+  button.textContent = "保存中…";
   try {
     state.currentProduct = await api(`/api/products/${state.currentItemId}`, {
       method: "PATCH",
@@ -441,6 +448,9 @@ async function saveProductSettings() {
     toast("商品设置已保存");
   } catch (error) {
     toast(error.message);
+  } finally {
+    button.disabled = false;
+    button.textContent = originalLabel;
   }
 }
 

@@ -178,6 +178,19 @@ def test_detail_save_uses_atomic_product_update_and_preserves_error_inputs(
     assert "window.prompt" not in script
 
 
+def test_dynamic_feedback_and_taxonomy_controls_are_safe(tmp_path: Path) -> None:
+    page = request(app(tmp_path), "/").text
+    script = request(app(tmp_path), "/static/app.js").text
+
+    assert 'id="toast" class="toast" role="status"' in page
+    assert 'aria-live="polite"' in page
+    assert 'aria-atomic="true"' in page
+    assert 'const includeUncategorized = ["all", "uncategorized"].includes(selectedTrack);' in script
+    assert '${includeUncategorized ? \'<option value="uncategorized">未分类</option>\' : ""}' in script
+    assert 'button.textContent = "保存中…";' in script
+    assert "button.textContent = originalLabel;" in script
+
+
 def test_narrow_browser_keeps_toolbar_and_drawers_visible(tmp_path: Path) -> None:
     styles = request(app(tmp_path), "/static/styles.css").text
 
