@@ -5,8 +5,10 @@ import pytest
 
 from redshu_radar.storage.database import Database
 from redshu_radar.storage.repositories import (
+    CategoryRepository,
     CollectionRepository,
     ProductRepository,
+    TagRepository,
 )
 
 
@@ -101,3 +103,34 @@ def test_failure_attempt_does_not_create_snapshot(
     assert len(attempts) == 1
     assert attempts[0].succeeded is False
     assert attempts[0].http_status == 461
+
+
+def test_category_and_tag_repositories_round_trip(tmp_path: Path) -> None:
+    database = Database(tmp_path / "radar.sqlite3")
+    database.initialize()
+    categories = CategoryRepository(database)
+    tags = TagRepository(database)
+    created_at = datetime(2026, 9, 10, tzinfo=UTC)
+
+    track = categories.add(
+        name="AI 教程",
+        normalized_name="ai 教程",
+        parent_id=None,
+        created_at=created_at,
+    )
+    subcategory = categories.add(
+        name="提示词",
+        normalized_name="提示词",
+        parent_id=track.id,
+        created_at=created_at,
+    )
+    tag = tags.add(
+        name="开学季",
+        normalized_name="开学季",
+        created_at=created_at,
+    )
+
+    assert categories.get(track.id) == track
+    assert categories.list_all() == [track, subcategory]
+    assert tags.get(tag.id) == tag
+    assert tags.list_all() == [tag]

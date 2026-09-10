@@ -23,6 +23,25 @@ class Product:
 
 
 @dataclass(frozen=True)
+class Category:
+    id: int
+    name: str
+    normalized_name: str
+    parent_id: int | None
+    created_at: datetime
+    updated_at: datetime
+
+
+@dataclass(frozen=True)
+class Tag:
+    id: int
+    name: str
+    normalized_name: str
+    created_at: datetime
+    updated_at: datetime
+
+
+@dataclass(frozen=True)
 class Snapshot:
     id: int
     run_id: int

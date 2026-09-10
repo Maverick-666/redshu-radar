@@ -1,6 +1,13 @@
 from datetime import datetime
 
-from redshu_radar.domain import CollectionAttempt, CollectionRun, Product, Snapshot
+from redshu_radar.domain import (
+    Category,
+    CollectionAttempt,
+    CollectionRun,
+    Product,
+    Snapshot,
+    Tag,
+)
 from redshu_radar.storage.database import Database
 
 
@@ -32,6 +39,27 @@ def _product_from_row(row: object) -> Product:
         delivery=row["delivery"],
         notes=row["notes"],
         next_action=row["next_action"],
+    )
+
+
+def _category_from_row(row: object) -> Category:
+    return Category(
+        id=row["id"],
+        name=row["name"],
+        normalized_name=row["normalized_name"],
+        parent_id=row["parent_id"],
+        created_at=_as_datetime(row["created_at"]),
+        updated_at=_as_datetime(row["updated_at"]),
+    )
+
+
+def _tag_from_row(row: object) -> Tag:
+    return Tag(
+        id=row["id"],
+        name=row["name"],
+        normalized_name=row["normalized_name"],
+        created_at=_as_datetime(row["created_at"]),
+        updated_at=_as_datetime(row["updated_at"]),
     )
 
 
@@ -119,6 +147,151 @@ class ProductRepository:
                 ),
             )
         return self.get(item_id)
+
+    def replace_taxonomy(
+        self,
+        item_id: str,
+        *,
+        category_id: int | None,
+        tag_ids: list[int],
+    ) -> str | None:
+        with self.database.connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            product_exists = connection.execute(
+                "SELECT 1 FROM products WHERE item_id = ?", (item_id,)
+            ).fetchone()
+            if product_exists is None:
+                return "product"
+            if category_id is not None:
+                category = connection.execute(
+                    "SELECT parent_id FROM categories WHERE id = ?",
+                    (category_id,),
+                ).fetchone()
+                if category is None or category["parent_id"] is None:
+                    return "category"
+            if tag_ids:
+                placeholders = ", ".join("?" for _ in tag_ids)
+                tag_count = connection.execute(
+                    f"SELECT COUNT(*) FROM tags WHERE id IN ({placeholders})",
+                    tag_ids,
+                ).fetchone()[0]
+                if tag_count != len(tag_ids):
+                    return "tags"
+            connection.execute(
+                "UPDATE products SET category_id = ? WHERE item_id = ?",
+                (category_id, item_id),
+            )
+            connection.execute(
+                "DELETE FROM product_tags WHERE product_id = ?", (item_id,)
+            )
+            connection.executemany(
+                "INSERT INTO product_tags (product_id, tag_id) VALUES (?, ?)",
+                [(item_id, tag_id) for tag_id in tag_ids],
+            )
+        return None
+
+
+class CategoryRepository:
+    def __init__(self, database: Database) -> None:
+        self.database = database
+
+    def add(
+        self,
+        *,
+        name: str,
+        normalized_name: str,
+        parent_id: int | None,
+        created_at: datetime,
+    ) -> Category:
+        timestamp = _as_iso(created_at)
+        with self.database.connect() as connection:
+            connection.execute(
+                """
+                INSERT OR IGNORE INTO categories (
+                    name, normalized_name, parent_id, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?)
+                """,
+                (name, normalized_name, parent_id, timestamp, timestamp),
+            )
+            row = connection.execute(
+                """
+                SELECT * FROM categories
+                WHERE normalized_name = ? AND parent_id IS ?
+                """,
+                (normalized_name, parent_id),
+            ).fetchone()
+        if row is None:
+            raise RuntimeError("category insert did not produce a row")
+        return _category_from_row(row)
+
+    def get(self, category_id: int) -> Category | None:
+        with self.database.connect() as connection:
+            row = connection.execute(
+                "SELECT * FROM categories WHERE id = ?", (category_id,)
+            ).fetchone()
+        return _category_from_row(row) if row is not None else None
+
+    def list_all(self) -> list[Category]:
+        with self.database.connect() as connection:
+            rows = connection.execute(
+                "SELECT * FROM categories ORDER BY id"
+            ).fetchall()
+        return [_category_from_row(row) for row in rows]
+
+
+class TagRepository:
+    def __init__(self, database: Database) -> None:
+        self.database = database
+
+    def add(
+        self,
+        *,
+        name: str,
+        normalized_name: str,
+        created_at: datetime,
+    ) -> Tag:
+        timestamp = _as_iso(created_at)
+        with self.database.connect() as connection:
+            connection.execute(
+                """
+                INSERT OR IGNORE INTO tags (
+                    name, normalized_name, created_at, updated_at
+                ) VALUES (?, ?, ?, ?)
+                """,
+                (name, normalized_name, timestamp, timestamp),
+            )
+            row = connection.execute(
+                "SELECT * FROM tags WHERE normalized_name = ?",
+                (normalized_name,),
+            ).fetchone()
+        if row is None:
+            raise RuntimeError("tag insert did not produce a row")
+        return _tag_from_row(row)
+
+    def get(self, tag_id: int) -> Tag | None:
+        with self.database.connect() as connection:
+            row = connection.execute(
+                "SELECT * FROM tags WHERE id = ?", (tag_id,)
+            ).fetchone()
+        return _tag_from_row(row) if row is not None else None
+
+    def list_all(self) -> list[Tag]:
+        with self.database.connect() as connection:
+            rows = connection.execute("SELECT * FROM tags ORDER BY id").fetchall()
+        return [_tag_from_row(row) for row in rows]
+
+    def list_for_product(self, item_id: str) -> list[Tag]:
+        with self.database.connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT tags.* FROM tags
+                JOIN product_tags ON product_tags.tag_id = tags.id
+                WHERE product_tags.product_id = ?
+                ORDER BY tags.id
+                """,
+                (item_id,),
+            ).fetchall()
+        return [_tag_from_row(row) for row in rows]
 
 
 class CollectionRepository:
